@@ -1,0 +1,6 @@
+name = "aiventure-telegram-control"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+# Păstrează variabilele/secretele setate în Cloudflare (nu le suprascrie la deploy)
+keep_vars = true
