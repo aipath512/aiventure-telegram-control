@@ -1,5 +1,5 @@
 /**
- * AIVENTURE TELEGRAM CONTROL — consola de comandă prin Telegram.   v1.2 · 2026-10-26
+ * AIVENTURE TELEGRAM CONTROL — consola de comandă prin Telegram.   v1.3 · 2026-10-26
  *
  * v1.2 față de v1.1: ADAUGĂ /noi și /segmente [bilant] (citește D1 prin binding DB, doar SELECT).
  * v1.1 față de v1.0: ADAUGĂ /ore și /zile (restul rămâne neschimbat).
@@ -39,7 +39,7 @@
  *  - Numele câmpurilor GraphQL (rowsRead, rowsWritten) nu au putut fi rulate pe contul real înainte de livrare;
  *    dacă API-ul le respinge, /costuri arată mesajul de eroare al API-ului (fără token).
  */
-const VERSION = "v1.2 · 2026-10-26";
+const VERSION = "v1.3 · 2026-10-26";
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 const DB_NAMES = { "0d6de488-285f-458b-b4b0-5f9ac913c5f1": "b2b-romania-db" };
 // Cote incluse în Workers Paid (D1): 25 mld citiri / lună, 50 mil scrieri / lună. Peste cotă: 1 USD / mld citiri, 1 USD / mil scrieri.
@@ -112,6 +112,7 @@ async function answer(env, chatId, cmd, args) {
     else if (cmd === "/ore") reply = await hoursReport(env, args && args[0]);
     else if (cmd === "/zile") reply = await daysReport(env);
     else if (cmd === "/noi") reply = await noiReport(env);
+    else if (cmd === "/sonda") reply = await sondaOnrc();
     else if (cmd === "/segmente") reply = await segmenteReport(env, args && args[0]);
     else reply = "Comanda necunoscuta.\n\n" + helpText();
   } catch (e) {
@@ -121,7 +122,7 @@ async function answer(env, chatId, cmd, args) {
 }
 
 function helpText() {
-  return "Comenzi disponibile:\n/ping - test dus-intors\n/status - starea serverului\n/costuri - D1: randuri citite/scrise si cost estimat\n/ore [H] - citiri/scrieri pe ore, de la ora H (implicit 1)\n/zile - ultimele 7 zile\n/noi - firme noi pe luna + diferenta fata de luna precedenta\n/segmente - firme pe vechime (sub 1 an, 1-2, 2-3, peste 3)\n/segmente bilant - la fel, plus peste 3 ani cu bilant (~17 s, ~7,5 mil. citiri)\n/help - aceasta lista";
+  return "Comenzi disponibile:\n/ping - test dus-intors\n/status - starea serverului\n/costuri - D1: randuri citite/scrise si cost estimat\n/ore [H] - citiri/scrieri pe ore, de la ora H (implicit 1)\n/zile - ultimele 7 zile\n/noi - firme noi pe luna + diferenta fata de luna precedenta\n/segmente - firme pe vechime (sub 1 an, 1-2, 2-3, peste 3)\n/segmente bilant - la fel, plus peste 3 ani cu bilant (~17 s, ~7,5 mil. citiri)\n/sonda - test acces data.gov.ro din Cloudflare (temporar)\n/help - aceasta lista";
 }
 
 async function send(env, chatId, text) {
@@ -425,4 +426,39 @@ async function segmenteReport(env, mode) {
   } catch (e) {
     return `Segmente: eroare la interogarea bazei (${e && e.message ? String(e.message).slice(0, 120) : "necunoscuta"}).`;
   }
+}
+
+
+// ---------------- v1.3: /sonda (temporar) - poate Cloudflare sa citeasca data.gov.ro? ----------------
+async function fetchT(url, opt, ms) {
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), ms);
+  try { return await fetch(url, Object.assign({ signal: c.signal, headers: { "User-Agent": "AiVenture-ONRC-sonda/1.0 (+contact@5thelement.ai)" } }, opt || {})); }
+  finally { clearTimeout(t); }
+}
+async function sondaOnrc() {
+  const out = ["SONDA data.gov.ro (din Cloudflare)"];
+  const t0 = Date.now();
+  try {
+    const r = await fetchT("https://data.gov.ro/api/3/action/package_show?id=firme-19-10-2026", {}, 20000);
+    out.push(`package_show: HTTP ${r.status} in ${Date.now() - t0} ms`);
+    if (r.ok) {
+      const j = await r.json();
+      const res = (j.result && j.result.resources) || [];
+      out.push(`Set: ${String(j.result && j.result.title || "?").slice(0, 70)} | resurse: ${res.length}`);
+      for (const x of res) out.push(`- ${String(x.name || "?").slice(0, 40)} | ${x.size || "?"} B`);
+      const f = res.find((x) => /OD_FIRME/i.test(x.name || ""));
+      if (f && f.url) {
+        const t1 = Date.now();
+        const r2 = await fetchT(f.url, { headers: { "User-Agent": "AiVenture-ONRC-sonda/1.0", "Range": "bytes=0-1023" } }, 25000);
+        const b = new Uint8Array(await r2.arrayBuffer());
+        const txt = new TextDecoder("utf-8").decode(b.slice(0, 300));
+        out.push(`OD_FIRME: HTTP ${r2.status} in ${Date.now() - t1} ms | tip ${r2.headers.get("content-type")} | lungime ${r2.headers.get("content-length") || r2.headers.get("content-range") || "?"}`);
+        out.push(`primii octeti: ${b[0]},${b[1]} ${b[0] === 80 && b[1] === 75 ? "(ZIP)" : "(text)"}`);
+        out.push("antet: " + txt.split(/\r?\n/)[0].slice(0, 220));
+      }
+    }
+  } catch (e) {
+    out.push(`EROARE: ${e && e.name ? e.name : "necunoscuta"} dupa ${Date.now() - t0} ms`);
+  }
+  return out.join("\n");
 }
