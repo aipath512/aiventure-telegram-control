@@ -4,3 +4,9 @@ compatibility_date = "2026-10-01"
 workers_dev = true
 # Păstrează variabilele/secretele setate în Cloudflare (nu le suprascrie la deploy)
 keep_vars = true
+
+# v1.2: acces la baza b2b-romania-db (codul face doar SELECT)
+[[d1_databases]]
+binding = "DB"
+database_name = "b2b-romania-db"
+database_id = "0d6de488-285f-458b-b4b0-5f9ac913c5f1"

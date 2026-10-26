@@ -1,6 +1,7 @@
 /**
- * AIVENTURE TELEGRAM CONTROL — consola de comandă prin Telegram.   v1.1 · 2026-10-26
+ * AIVENTURE TELEGRAM CONTROL — consola de comandă prin Telegram.   v1.2 · 2026-10-26
  *
+ * v1.2 față de v1.1: ADAUGĂ /noi și /segmente [bilant] (citește D1 prin binding DB, doar SELECT).
  * v1.1 față de v1.0: ADAUGĂ /ore și /zile (restul rămâne neschimbat).
  *   /ore [H]  - rânduri citite/scrise pe ore, de la ora locală H (implicit 1 = ora 01:00 București, azi) până acum;
  *               pentru b2b-romania-db + total cont. Încearcă detaliu pe oră, apoi pe 15 minute; dacă API-ul nu
@@ -38,7 +39,7 @@
  *  - Numele câmpurilor GraphQL (rowsRead, rowsWritten) nu au putut fi rulate pe contul real înainte de livrare;
  *    dacă API-ul le respinge, /costuri arată mesajul de eroare al API-ului (fără token).
  */
-const VERSION = "v1.1 · 2026-10-26";
+const VERSION = "v1.2 · 2026-10-26";
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 const DB_NAMES = { "0d6de488-285f-458b-b4b0-5f9ac913c5f1": "b2b-romania-db" };
 // Cote incluse în Workers Paid (D1): 25 mld citiri / lună, 50 mil scrieri / lună. Peste cotă: 1 USD / mld citiri, 1 USD / mil scrieri.
@@ -110,6 +111,8 @@ async function answer(env, chatId, cmd, args) {
     else if (cmd === "/costuri") reply = await costReport(env);
     else if (cmd === "/ore") reply = await hoursReport(env, args && args[0]);
     else if (cmd === "/zile") reply = await daysReport(env);
+    else if (cmd === "/noi") reply = await noiReport(env);
+    else if (cmd === "/segmente") reply = await segmenteReport(env, args && args[0]);
     else reply = "Comanda necunoscuta.\n\n" + helpText();
   } catch (e) {
     reply = "Eroare interna la procesarea comenzii.";
@@ -118,7 +121,7 @@ async function answer(env, chatId, cmd, args) {
 }
 
 function helpText() {
-  return "Comenzi disponibile:\n/ping - test dus-intors\n/status - starea serverului\n/costuri - D1: randuri citite/scrise si cost estimat\n/ore [H] - citiri/scrieri pe ore, de la ora H (implicit 1)\n/zile - ultimele 7 zile\n/help - aceasta lista";
+  return "Comenzi disponibile:\n/ping - test dus-intors\n/status - starea serverului\n/costuri - D1: randuri citite/scrise si cost estimat\n/ore [H] - citiri/scrieri pe ore, de la ora H (implicit 1)\n/zile - ultimele 7 zile\n/noi - firme noi pe luna + diferenta fata de luna precedenta\n/segmente - firme pe vechime (sub 1 an, 1-2, 2-3, peste 3)\n/segmente bilant - la fel, plus peste 3 ani cu bilant (~17 s, ~7,5 mil. citiri)\n/help - aceasta lista";
 }
 
 async function send(env, chatId, text) {
@@ -351,4 +354,75 @@ async function daysReport(env, nDays) {
   if (byDay.size === 0) lines.push("(nicio activitate inregistrata)");
   lines.push("Ziua curenta este partiala. Estimare din analitice, nu factura.");
   return lines.join("\n");
+}
+
+
+// ---------------- v1.2: /noi și /segmente (D1, doar SELECT) ----------------
+function isoToday() { return new Date().toISOString().slice(0, 10); }
+function isoMinusYears(n) {
+  const d = new Date(); d.setUTCFullYear(d.getUTCFullYear() - n);
+  return d.toISOString().slice(0, 10);
+}
+function pct(a, b) {
+  if (!b) return "n/a";
+  const p = (a - b) / b * 100;
+  return `${p >= 0 ? "+" : ""}${p.toFixed(1)}%`;
+}
+
+async function noiReport(env) {
+  if (!env.DB) return "Noi: lipseste legatura DB (binding) la baza b2b-romania-db.";
+  try {
+    const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 13);
+    const start = d.toISOString().slice(0, 10);
+    const rows = (await env.DB.prepare(
+      "SELECT substr(data_inmatriculare,1,7) AS luna, COUNT(*) AS n, SUM(persoana_fizica) AS pfa FROM onrc_firme WHERE data_inmatriculare >= ? GROUP BY 1 ORDER BY 1"
+    ).bind(start).all()).results || [];
+    const mx = await env.DB.prepare("SELECT MAX(data_inmatriculare) AS m FROM onrc_firme").first();
+    const maxDate = mx && mx.m ? String(mx.m) : "";
+    const lines = ["FIRME NOI pe luna inmatricularii (ONRC)"];
+    let prev = null;
+    for (const r of rows) {
+      const partial = maxDate && String(r.luna) === maxDate.slice(0, 7);
+      lines.push(`${r.luna}: ${fmtInt(r.n)} (PFA ${fmtInt(r.pfa)})${prev !== null ? "  " + pct(r.n, prev) : ""}${partial ? "  [luna partiala]" : ""}`);
+      prev = r.n;
+    }
+    lines.push(`Date ONRC pana la: ${maxDate || "?"}. Ultimele 1-2 luni pot fi incomplete.`);
+    return lines.join("\n");
+  } catch (e) {
+    return `Noi: eroare la interogarea bazei (${e && e.message ? String(e.message).slice(0, 120) : "necunoscuta"}).`;
+  }
+}
+
+async function segmenteReport(env, mode) {
+  if (!env.DB) return "Segmente: lipseste legatura DB (binding) la baza b2b-romania-db.";
+  const withBilant = String(mode || "").toLowerCase().startsWith("bilan");
+  const c1 = isoMinusYears(1), c2 = isoMinusYears(2), c3 = isoMinusYears(3);
+  try {
+    const r = await env.DB.prepare(
+      "SELECT (SELECT COUNT(*) FROM onrc_firme WHERE data_inmatriculare > ?1) AS s1, " +
+      "(SELECT COUNT(*) FROM onrc_firme WHERE data_inmatriculare > ?2 AND data_inmatriculare <= ?1) AS s2, " +
+      "(SELECT COUNT(*) FROM onrc_firme WHERE data_inmatriculare > ?3 AND data_inmatriculare <= ?2) AS s3, " +
+      "(SELECT COUNT(*) FROM onrc_firme WHERE data_inmatriculare <= ?3) AS s4"
+    ).bind(c1, c2, c3).first();
+    const tot = r.s1 + r.s2 + r.s3 + r.s4;
+    const lines = [`SEGMENTE dupa vechime, la ${isoToday()} (total ${fmtInt(tot)})`];
+    lines.push(`Sub 1 an (dupa ${c1}): ${fmtInt(r.s1)}`);
+    lines.push(`1-2 ani: ${fmtInt(r.s2)}`);
+    lines.push(`2-3 ani: ${fmtInt(r.s3)}`);
+    lines.push(`Peste 3 ani (pana la ${c3}): ${fmtInt(r.s4)}`);
+    if (withBilant) {
+      const b = await env.DB.prepare(
+        "WITH b AS (SELECT cui, MAX(ca) AS ca FROM (SELECT cui, cifra_afaceri AS ca FROM mf_bilant_2023 UNION ALL SELECT cui, cifra_afaceri FROM mf_bilant_2024 UNION ALL SELECT cui, cifra_afaceri FROM mf_bilant_2025) GROUP BY cui) " +
+        "SELECT COUNT(*) AS cu_bilant, SUM(CASE WHEN b.ca > 0 THEN 1 ELSE 0 END) AS cu_ca FROM b JOIN onrc_firme o ON o.cui = b.cui WHERE o.data_inmatriculare <= ?"
+      ).bind(c3).first();
+      lines.push(`Peste 3 ani cu bilant depus (2023-2025): ${fmtInt(b.cu_bilant)}`);
+      lines.push(`Peste 3 ani cu bilant si cifra de afaceri > 0: ${fmtInt(b.cu_ca)}`);
+    } else {
+      lines.push("Pentru 'peste 3 ani cu bilant': /segmente bilant (~17 s, ~7,5 mil. citiri, sub $0,01).");
+    }
+    lines.push("Include PFA. Date ONRC cu intarziere; vezi /noi.");
+    return lines.join("\n");
+  } catch (e) {
+    return `Segmente: eroare la interogarea bazei (${e && e.message ? String(e.message).slice(0, 120) : "necunoscuta"}).`;
+  }
 }
