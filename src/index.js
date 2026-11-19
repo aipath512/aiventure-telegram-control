@@ -1,5 +1,7 @@
 /**
- * AIVENTURE TELEGRAM CONTROL — consola de comandă prin Telegram.   v1.7 · 2026-11-19
+ * AIVENTURE TELEGRAM CONTROL — consola de comandă prin Telegram.   v1.8 · 2026-11-19
+ *
+ * v1.8 față de v1.7: blog v1.4 — IndexNow automat la /publica + comanda /anunta (toate articolele).
  *
  * v1.7 față de v1.6: blog v1.3 — autorul trimite la https://aiventure.ro/autor/aiventure-team/; blocul de autor, distribuirea și
  *   pasul următor (funnel) le pune middleware-ul site-ului aiventure.ro pe toate articolele.
@@ -53,7 +55,7 @@
  *    dacă API-ul le respinge, /costuri arată mesajul de eroare al API-ului (fără token).
  */
 import { blogCommand, blogCollect } from "./blog.js";
-const VERSION = "v1.7 · 2026-11-19";
+const VERSION = "v1.8 · 2026-11-19";
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 const DB_NAMES = { "0d6de488-285f-458b-b4b0-5f9ac913c5f1": "b2b-romania-db" };
 // Cote incluse în Workers Paid (D1): 25 mld citiri / lună, 50 mil scrieri / lună. Peste cotă: 1 USD / mld citiri, 1 USD / mil scrieri.
@@ -132,7 +134,7 @@ async function answer(env, chatId, cmd, args) {
     else if (cmd === "/noi") reply = await noiReport(env);
     else if (cmd === "/sonda") reply = await sondaOnrc();
     else if (cmd === "/segmente") reply = await segmenteReport(env, args && args[0]);
-    else if (["/articol", "/editez", "/gata", "/publica", "/anulez"].includes(cmd)) reply = await blogCommand(env, chatId, cmd, args);
+    else if (["/articol", "/editez", "/gata", "/publica", "/anulez", "/anunta"].includes(cmd)) reply = await blogCommand(env, chatId, cmd, args);
     else reply = "Comanda necunoscuta.\n\n" + helpText();
   } catch (e) {
     reply = "Eroare interna la procesarea comenzii.";
@@ -141,7 +143,7 @@ async function answer(env, chatId, cmd, args) {
 }
 
 function helpText() {
-  return "BLOG aiventure.ro/blog:\n/articol - incepe un articol nou, apoi lipiti textul\n   (optional dupa titlu: Descriere: ... / Cuvinte cheie: a, b)\n/editez ART-000033 - modifica un articol (devine v1.1, v1.2 ...)\n/gata - verificare: titlu SEO, descriere, cuvinte cheie, intrebari AI, autor\n/publica - publica pe site\n/anulez - sterge ciorna\n\nComenzi disponibile:\n/ping - test dus-intors\n/status - starea serverului\n/costuri - D1: randuri citite/scrise si cost estimat\n/ore [H] - citiri/scrieri pe ore, de la ora H (implicit 1)\n/zile - ultimele 7 zile\n/noi - firme noi pe luna + diferenta fata de luna precedenta\n/segmente - firme pe vechime (sub 1 an, 1-2, 2-3, peste 3)\n/segmente bilant - la fel, plus peste 3 ani cu bilant (~17 s, ~7,5 mil. citiri)\n/sonda - test acces data.gov.ro din Cloudflare (temporar)\n/help - aceasta lista";
+  return "BLOG aiventure.ro/blog:\n/articol - incepe un articol nou, apoi lipiti textul\n   (optional dupa titlu: Descriere: ... / Cuvinte cheie: a, b)\n/editez ART-000033 - modifica un articol (devine v1.1, v1.2 ...)\n/gata - verificare: titlu SEO, descriere, cuvinte cheie, intrebari AI, autor\n/publica - publica pe site\n/anulez - sterge ciorna\n/anunta - anunta toate articolele la Bing/IndexNow (ChatGPT)\n\nComenzi disponibile:\n/ping - test dus-intors\n/status - starea serverului\n/costuri - D1: randuri citite/scrise si cost estimat\n/ore [H] - citiri/scrieri pe ore, de la ora H (implicit 1)\n/zile - ultimele 7 zile\n/noi - firme noi pe luna + diferenta fata de luna precedenta\n/segmente - firme pe vechime (sub 1 an, 1-2, 2-3, peste 3)\n/segmente bilant - la fel, plus peste 3 ani cu bilant (~17 s, ~7,5 mil. citiri)\n/sonda - test acces data.gov.ro din Cloudflare (temporar)\n/help - aceasta lista";
 }
 
 async function send(env, chatId, text) {

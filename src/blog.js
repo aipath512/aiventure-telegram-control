@@ -2,6 +2,10 @@
  * AIVENTURE BLOG PRIN TELEGRAM — v1.1 · 2026-11-19
  * Publică și modifică articole pe https://aiventure.ro/blog/ direct din Telegram, fără Claude și fără laptop.
  *
+ * v1.4 față de v1.3: IndexNow — după fiecare /publica (articol nou sau modificat) botul anunță singur pagina, /blog/ și pagina
+ *   autorului la Bing și la motoarele IndexNow (ChatGPT caută prin Bing). Comanda /anunta trimite din nou toate articolele.
+ *   Cheia publică: https://aiventure.ro/7a359604319b9e8555c8fe3074d402c7.txt
+ *
  * v1.3 față de v1.2: autorul „AiVenture Team” are pagina proprie https://aiventure.ro/autor/aiventure-team/ — linia de autor și
  *   Schema.org (author.url) trimit acolo. Blocul vizibil „Despre autor” (firma legală + LinkedIn AiVenture Digital + Dan Ionescu),
  *   butoanele „Copiază linkul”, pasul următor (Audit GEO) și articolele înrudite le pune middleware-ul site-ului
@@ -43,7 +47,7 @@
  *
  * NEVOI: KV BLOG (aiventure-blog-ciorne); secret GITHUB_TOKEN (doar aipath512/aiventure, Contents: Read and write)
  */
-export const BLOG_VERSION = "blog v1.3 · 2026-11-19";
+export const BLOG_VERSION = "blog v1.4 · 2026-11-19";
 const REPO = "aipath512/aiventure";
 const BRANCH = "main";
 const SITE = "https://aiventure.ro";
@@ -53,6 +57,8 @@ const TEAM_ID = "https://5thelement.ai/#team";
 const AUTHOR_NAME = "AiVenture Team";
 const AUTHOR_URL = "https://aiventure.ro/autor/aiventure-team/";
 const TZ = "Europe/Bucharest";
+const INDEXNOW_KEY = "7a359604319b9e8555c8fe3074d402c7";
+const INDEXNOW_ENDPOINTS = ["https://api.indexnow.org/indexnow", "https://www.bing.com/indexnow"];
 const DRAFT_TTL = 7 * 24 * 3600;
 const OTS_CALENDARS = ["https://a.pool.opentimestamps.org", "https://b.pool.opentimestamps.org", "https://a.pool.eternitywall.com"];
 
@@ -99,6 +105,12 @@ export async function blogCommand(env, chatId, cmd, args = []) {
     await env.BLOG.put(kState(chatId), JSON.stringify({ mode: "edit", id, started: Date.now() }), { expirationTtl: DRAFT_TTL });
     return `✏️ Modificare ${id} (acum v${a.version || "1.0"}): ${a.title}\n${a.canonical}\nLipiti TEXTUL COMPLET nou (prima linie = titlul). Devine v${bump(a.version)}; v${a.version || "1.0"} ramane in istoric.\nCand ati terminat: /gata   Renuntare: /anulez`;
   }
+  if (cmd === "/anunta") {
+    const list = ((await readArticles(env)).articles || []).filter((a) => a.status === "published" && a.slug);
+    const urls = [`${SITE}/blog/`, `${SITE}/autor/aiventure-team/`, ...list.map((a) => `${SITE}/blog/${a.slug}/`)];
+    const r = await indexNow(urls);
+    return `📣 IndexNow: anuntate ${urls.length} pagini (blog, autor, ${list.length} articole)\nRaspuns: ${r}\n(200/202 = primit)`;
+  }
   if (cmd === "/anulez") {
     const n = await clearDraft(env, chatId);
     return n ? "❌ Ciorna stearsa. Nu s-a publicat nimic." : "Nu exista nicio ciorna.";
@@ -135,7 +147,7 @@ export async function blogCommand(env, chatId, cmd, args = []) {
       const r = d.state.mode === "edit" ? await publishEdit(env, d.state.id, d.text) : await publishNew(env, d.text);
       await clearDraft(env, chatId);
       const ots = r.ots ? `OpenTimestamps: trimis la ${r.ots} calendare (confirmare Bitcoin in cateva ore)` : "OpenTimestamps: calendarele nu au raspuns (articolul e publicat oricum)";
-      return `✅ PUBLICAT ${r.id} · v${r.version} — ${r.when}\n${r.url}\nAutor: ${AUTHOR_NAME} · Intrebari pentru AI: ${r.faq}\nDate firma: ${r.identitySource}\nSHA-256: ${r.sha}\n${ots}\nApare pe site in ~1 minut.`;
+      return `✅ PUBLICAT ${r.id} · v${r.version} — ${r.when}\n${r.url}\nAutor: ${AUTHOR_NAME} · Intrebari pentru AI: ${r.faq}\nDate firma: ${r.identitySource}\nSHA-256: ${r.sha}\n${ots}\nIndexNow (Bing, ChatGPT): ${r.idx}\nApare pe site in ~1 minut.`;
     } catch (e) {
       return `⚠️ Publicarea a esuat: ${String(e && e.message || e).slice(0, 300)}\nCiorna ramane; puteti incerca din nou /publica.`;
     }
@@ -215,6 +227,18 @@ export function localParts(d) {
     ro: `${p.day}.${p.month}.${p.year}, ora ${p.hour}:${p.minute}, ora României (UTC${off})`
   };
 }
+
+// ---------- IndexNow: anunță paginile noi/modificate ----------
+export async function indexNow(urls) {
+  const body = JSON.stringify({ host: "aiventure.ro", key: INDEXNOW_KEY, keyLocation: `${SITE}/${INDEXNOW_KEY}.txt`, urlList: [...new Set(urls)] });
+  const res = await Promise.all(INDEXNOW_ENDPOINTS.map(async (u) => {
+    const name = u.includes("bing") ? "Bing" : "IndexNow";
+    try { const r = await fetch(u, { method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body }); return `${name} ${r.status}`; }
+    catch (e) { return `${name} eroare`; }
+  }));
+  return res.join(", ");
+}
+const pingList = (url) => [url, `${SITE}/blog/`, `${SITE}/autor/aiventure-team/`];
 
 // ---------- GitHub ----------
 async function gh(env, path, opt = {}) {
@@ -333,7 +357,8 @@ async function publishNew(env, raw) {
   ];
   if (ots) files.push({ path: `blog/${slug}/article.txt.ots`, bytes: ots.bytes });
   await commitFiles(env, `Blog: ${id} v1.0 ${parsed.title} (Telegram)`, files);
-  return { id, url, version: "1.0", sha, ots: ots && ots.calendars, when: when.ro, faq: parsed.faq.length, identitySource: ident.source };
+  const inow = await indexNow(pingList(url));
+  return { id, url, version: "1.0", sha, ots: ots && ots.calendars, when: when.ro, faq: parsed.faq.length, identitySource: ident.source, idx: inow };
 }
 
 async function publishEdit(env, id, raw) {
@@ -373,7 +398,8 @@ async function publishEdit(env, id, raw) {
   );
   if (ots) files.push({ path: `blog/${slug}/article.txt.ots`, bytes: ots.bytes });
   await commitFiles(env, `Blog: ${id} v${newV} ${parsed.title} (Telegram, modificare)`, files);
-  return { id, url, version: newV, sha, ots: ots && ots.calendars, when: when.ro, faq: parsed.faq.length, identitySource: ident.source };
+  const inow = await indexNow(pingList(url));
+  return { id, url, version: newV, sha, ots: ots && ots.calendars, when: when.ro, faq: parsed.faq.length, identitySource: ident.source, idx: inow };
 }
 
 // ---------- text -> HTML ----------
