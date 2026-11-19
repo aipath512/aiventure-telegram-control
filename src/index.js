@@ -1,5 +1,9 @@
 /**
- * AIVENTURE TELEGRAM CONTROL — consola de comandă prin Telegram.   v1.3 · 2026-10-26
+ * AIVENTURE TELEGRAM CONTROL — consola de comandă prin Telegram.   v1.4 · 2026-11-19
+ *
+ * v1.4 față de v1.3: ADAUGĂ publicarea de articole pe https://aiventure.ro/blog/ (cod în src/blog.js):
+ *   /articol -> lipiți textul (oricâte mesaje) -> /gata (verificare) -> /publica   (sau /anulez)
+ *   Are nevoie de: KV BLOG (aiventure-blog-ciorne) și secretul GITHUB_TOKEN. Restul comenzilor rămân neschimbate.
  *
  * v1.2 față de v1.1: ADAUGĂ /noi și /segmente [bilant] (citește D1 prin binding DB, doar SELECT).
  * v1.1 față de v1.0: ADAUGĂ /ore și /zile (restul rămâne neschimbat).
@@ -39,7 +43,8 @@
  *  - Numele câmpurilor GraphQL (rowsRead, rowsWritten) nu au putut fi rulate pe contul real înainte de livrare;
  *    dacă API-ul le respinge, /costuri arată mesajul de eroare al API-ului (fără token).
  */
-const VERSION = "v1.3 · 2026-10-26";
+import { blogCommand, blogCollect } from "./blog.js";
+const VERSION = "v1.4 · 2026-11-19";
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 const DB_NAMES = { "0d6de488-285f-458b-b4b0-5f9ac913c5f1": "b2b-romania-db" };
 // Cote incluse în Workers Paid (D1): 25 mld citiri / lună, 50 mil scrieri / lună. Peste cotă: 1 USD / mld citiri, 1 USD / mil scrieri.
@@ -95,7 +100,11 @@ async function handleTelegram(request, env, ctx) {
   // Doar chat-ul autorizat; restul se ignoră (răspuns 200 ca Telegram să nu reîncerce).
   if (!msg || chatId === undefined || String(chatId) !== String(env.TELEGRAM_CHAT_ID || "")) return new Response("ok");
   const text = String(msg.text || "").trim();
-  if (!text.startsWith("/")) return new Response("ok");
+  if (!text.startsWith("/")) {
+    // v1.4: text obișnuit = bucată de articol, dacă o ciornă e deschisă (/articol)
+    try { await blogCollect(env, chatId, msg); } catch (_) { /* ignorăm */ }
+    return new Response("ok");
+  }
   const cmd = text.split(/[\s@]/)[0].toLowerCase();
   const args = text.split(/\s+/).slice(1);
   ctx.waitUntil(answer(env, chatId, cmd, args));
@@ -114,6 +123,7 @@ async function answer(env, chatId, cmd, args) {
     else if (cmd === "/noi") reply = await noiReport(env);
     else if (cmd === "/sonda") reply = await sondaOnrc();
     else if (cmd === "/segmente") reply = await segmenteReport(env, args && args[0]);
+    else if (["/articol", "/gata", "/publica", "/anulez"].includes(cmd)) reply = await blogCommand(env, chatId, cmd);
     else reply = "Comanda necunoscuta.\n\n" + helpText();
   } catch (e) {
     reply = "Eroare interna la procesarea comenzii.";
@@ -122,7 +132,7 @@ async function answer(env, chatId, cmd, args) {
 }
 
 function helpText() {
-  return "Comenzi disponibile:\n/ping - test dus-intors\n/status - starea serverului\n/costuri - D1: randuri citite/scrise si cost estimat\n/ore [H] - citiri/scrieri pe ore, de la ora H (implicit 1)\n/zile - ultimele 7 zile\n/noi - firme noi pe luna + diferenta fata de luna precedenta\n/segmente - firme pe vechime (sub 1 an, 1-2, 2-3, peste 3)\n/segmente bilant - la fel, plus peste 3 ani cu bilant (~17 s, ~7,5 mil. citiri)\n/sonda - test acces data.gov.ro din Cloudflare (temporar)\n/help - aceasta lista";
+  return "BLOG aiventure.ro/blog:\n/articol - incepe un articol nou, apoi lipiti textul\n/gata - verificare (titlu, adresa, caractere)\n/publica - publica pe site\n/anulez - sterge ciorna\n\nComenzi disponibile:\n/ping - test dus-intors\n/status - starea serverului\n/costuri - D1: randuri citite/scrise si cost estimat\n/ore [H] - citiri/scrieri pe ore, de la ora H (implicit 1)\n/zile - ultimele 7 zile\n/noi - firme noi pe luna + diferenta fata de luna precedenta\n/segmente - firme pe vechime (sub 1 an, 1-2, 2-3, peste 3)\n/segmente bilant - la fel, plus peste 3 ani cu bilant (~17 s, ~7,5 mil. citiri)\n/sonda - test acces data.gov.ro din Cloudflare (temporar)\n/help - aceasta lista";
 }
 
 async function send(env, chatId, text) {

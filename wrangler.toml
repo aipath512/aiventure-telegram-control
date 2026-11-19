@@ -10,3 +10,8 @@ keep_vars = true
 binding = "DB"
 database_name = "b2b-romania-db"
 database_id = "0d6de488-285f-458b-b4b0-5f9ac913c5f1"
+
+# v1.4: ciornele articolelor de blog (/articol ... /gata ... /publica)
+[[kv_namespaces]]
+binding = "BLOG"
+id = "e527e57e43da47bcaae7b66d267bcb95"
