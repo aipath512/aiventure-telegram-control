@@ -2,6 +2,21 @@
  * AIVENTURE BLOG PRIN TELEGRAM — v1.1 · 2026-11-19
  * Publică și modifică articole pe https://aiventure.ro/blog/ direct din Telegram, fără Claude și fără laptop.
  *
+ * v1.2 față de v1.1 — fiecare articol iese optimizat pentru Google ȘI pentru AI:
+ *   AUTOR      „AiVenture Team” + toate datele firmei AiVenture S.R.L., citite la publicare din masterul unic
+ *              https://github.com/aipath512/aiventure-identity (identitate/aiventure-identity.json); dacă masterul
+ *              nu răspunde, se folosește copia de rezervă din acest fișier (v1.10, 2026-11-18).
+ *              Schema.org: aceeași organizație peste tot, @id https://5thelement.ai/#organization (regula D10).
+ *   DATA + ORA în ora României cu fus (ex. 2026-11-19T12:00:00+02:00), vizibile și în Schema.org.
+ *   STRAT GOOGLE  titlu SEO, meta description, meta keywords, canonical, Open Graph, article:published_time, tag-uri.
+ *   STRAT AI      subtitlurile-întrebare (## ...?) + primul paragraf de sub ele => FAQPage; la fel „**Întrebare?**”
+ *                 urmat de răspuns; BlogPosting + Organization + BreadcrumbList; secțiune „Despre autor” vizibilă.
+ *   /gata arată titlul SEO, descrierea, cuvintele cheie, întrebările-intenție și avertismente, înainte de /publica.
+ *   Opțional după titlu: "Descriere: ...", "Cuvinte cheie: a, b, c", "Slug: ...", "Titlu SEO: ..." — sau un antet
+ *   "---" ... "---" (title, meta_description, cuvant_cheie_principal, cuvinte_cheie_secundare, categorie, intentii).
+ *   Se ignoră automat (le pune botul): blocurile ```...```, comentariile <!-- -->, rândurile "---",
+ *   rândul „**Categorie:** ... **Autor:** ...” și secțiunea „Despre autor”.
+ *
  * v1.1 față de v1.0:
  *   - linia de versiune completă pe pagină: ID · vX.Y · publicat ZZ.LL.AAAA HH:MM (București) · modificat … · categorie
  *   - OpenTimestamps automat: amprenta SHA-256 a conținutului (article.txt) e trimisă la 3 calendare OTS;
@@ -23,12 +38,37 @@
  *
  * NEVOI: KV BLOG (aiventure-blog-ciorne); secret GITHUB_TOKEN (doar aipath512/aiventure, Contents: Read and write)
  */
-export const BLOG_VERSION = "blog v1.1 · 2026-11-19";
+export const BLOG_VERSION = "blog v1.2 · 2026-11-19";
 const REPO = "aipath512/aiventure";
 const BRANCH = "main";
 const SITE = "https://aiventure.ro";
+const IDENTITY_URL = "https://raw.githubusercontent.com/aipath512/aiventure-identity/main/identitate/aiventure-identity.json";
+const ORG_ID = "https://5thelement.ai/#organization";
+const TEAM_ID = "https://5thelement.ai/#team";
+const AUTHOR_NAME = "AiVenture Team";
+const TZ = "Europe/Bucharest";
 const DRAFT_TTL = 7 * 24 * 3600;
 const OTS_CALENDARS = ["https://a.pool.opentimestamps.org", "https://b.pool.opentimestamps.org", "https://a.pool.eternitywall.com"];
+
+// Copie de rezervă a masterului aiventure-identity v1.10 (2026-11-18) — folosită DOAR dacă masterul nu răspunde.
+const IDENTITY_FALLBACK = {
+  _meta: { versiune: "1.10 (copie de rezervă în bot)" },
+  firma: {
+    denumire_legala: "AiVenture S.R.L.", denumire_alternativa: "AiVenture", brand_operare: "5thelement.ai",
+    cui: "51415878", cod_tva: "RO51415878", euid: "ROONRC.J2025016406000", nr_registrul_comertului: "J2025016406000",
+    data_infiintare: "2025-03-07", caen_principal: "6210",
+    sediu: { strada: "Drumul Pădurea Pustnicul nr. 141C, Corp A, Etaj 2, Ap. 5", localitate: "București", sector: "Sector 1", cod_postal: "014044", tara: "RO" },
+    fondator: { nume: "Dan Ionescu", orcid: "https://orcid.org/0009-0002-5498-1046", linkedin: "https://ro.linkedin.com/in/dan-ionesco-a856082a0" }
+  },
+  contact: { email: "contact@5thelement.ai", whatsapp: "https://api.whatsapp.com/send/?phone=40737123540" },
+  profiluri: {
+    linkedin_firma: "https://www.linkedin.com/company/107338970", linkedin_showcase: "https://www.linkedin.com/showcase/5thelement-ai/",
+    crunchbase: "https://www.crunchbase.com/organization/aiventure-s-r-l", facebook: "https://www.facebook.com/people/Aiventure/61573220584246/",
+    x: "https://x.com/aipath512", youtube: "https://www.youtube.com/@AIVenture-q8u", medium: "https://medium.com/@aipath512",
+    reddit: "https://www.reddit.com/user/AiVentureRO/"
+  },
+  retea: { flagship: "5thelement.ai", domenii: ["5thelement.ai", "aiventure.ro"] }
+};
 
 const kState = (chat) => `stare:${chat}`;
 const kPartPrefix = (chat) => `parte:${chat}:`;
@@ -40,7 +80,7 @@ export async function blogCommand(env, chatId, cmd, args = []) {
   if (cmd === "/articol") {
     await clearDraft(env, chatId);
     await env.BLOG.put(kState(chatId), JSON.stringify({ mode: "nou", started: Date.now() }), { expirationTtl: DRAFT_TTL });
-    return "📝 Articol nou. Lipiti textul (prima linie = titlul). Poate fi in mai multe mesaje.\nCand ati terminat: /gata\nRenuntare: /anulez";
+    return "📝 Articol nou. Lipiti textul (prima linie = titlul). Poate fi in mai multe mesaje.\nOptional, dupa titlu:\nDescriere: ...\nCuvinte cheie: a, b, c\nSubtitlurile cu ? devin intrebari pentru AI.\nCand ati terminat: /gata\nRenuntare: /anulez";
   }
   if (cmd === "/editez") {
     const id = normId(args[0]);
@@ -69,11 +109,17 @@ export async function blogCommand(env, chatId, cmd, args = []) {
       if (!a) return `Articolul ${d.state.id} nu mai exista.`;
       head = `👀 VERIFICARE MODIFICARE (nu e publicat inca)\n${a.id}: v${a.version || "1.0"} -> v${bump(a.version)}\nTitlu nou: ${parsed.title}\nAdresa (aceeasi): ${a.canonical}`;
     } else {
-      const p = pickIdSlug(parsed.title, list);
+      const p = pickIdSlug(parsed.slug || parsed.title, list);
       head = `👀 VERIFICARE (nu e publicat inca)\nTitlu: ${parsed.title}\nAdresa: ${p.url}\nNumar: ${p.id} · v1.0`;
     }
-    const sec = parsed.headings.length ? "\nSubtitluri: " + parsed.headings.length + "\n- " + parsed.headings.slice(0, 12).join("\n- ") : "";
-    return `${head}\nPrimit: ${d.parts} mesaje, ${d.text.length.toLocaleString("ro-RO")} caractere${sec}\n\nPublicare: /publica\nMai adaugati text: lipiti-l acum, apoi din nou /gata\nRenuntare: /anulez`;
+    const qs = parsed.faq.length ? "\n- " + parsed.faq.slice(0, 10).map((q) => q.q).join("\n- ") : " (niciuna — puneti subtitluri care se termina cu ?)";
+    const kw = parsed.keywords.length ? parsed.keywords.join(", ") : "(niciunul — adaugati randul „Cuvinte cheie: ...”)";
+    const warn = [];
+    if (!parsed.descFromAuthor) warn.push("descrierea e luata automat din primul paragraf");
+    if (parsed.seoTitle.length > 65) warn.push(`titlul SEO are ${parsed.seoTitle.length} caractere (ideal sub 60)`);
+    if (!parsed.faq.length) warn.push("fara intrebari-intentie, AI-ul are mai putin de citat");
+    const seo = `\n\nGOOGLE\nTitlu SEO: ${parsed.seoTitle}\nDescriere: ${parsed.desc}\nCuvinte cheie: ${kw}\n\nAI\nIntrebari-intentie cu raspuns: ${parsed.faq.length}${qs}\n\nAUTOR: ${AUTHOR_NAME} (AiVenture S.R.L., CUI 51415878 + toate datele firmei)\nORA: se pune la /publica (acum ar fi ${localParts(new Date()).ro})`;
+    return `${head}${seo}\nPrimit: ${d.parts} mesaje, ${d.text.length.toLocaleString("ro-RO")} caractere${warn.length ? "\n\n⚠️ " + warn.join("\n⚠️ ") : ""}\n\nPublicare: /publica\nMai adaugati text: lipiti-l acum, apoi din nou /gata\nRenuntare: /anulez`;
   }
   if (cmd === "/publica") {
     const d = await loadDraft(env, chatId);
@@ -83,7 +129,7 @@ export async function blogCommand(env, chatId, cmd, args = []) {
       const r = d.state.mode === "edit" ? await publishEdit(env, d.state.id, d.text) : await publishNew(env, d.text);
       await clearDraft(env, chatId);
       const ots = r.ots ? `OpenTimestamps: trimis la ${r.ots} calendare (confirmare Bitcoin in cateva ore)` : "OpenTimestamps: calendarele nu au raspuns (articolul e publicat oricum)";
-      return `✅ PUBLICAT ${r.id} · v${r.version}\n${r.url}\nSHA-256: ${r.sha}\n${ots}\nApare pe site in ~1 minut.`;
+      return `✅ PUBLICAT ${r.id} · v${r.version} — ${r.when}\n${r.url}\nAutor: ${AUTHOR_NAME} · Intrebari pentru AI: ${r.faq}\nDate firma: ${r.identitySource}\nSHA-256: ${r.sha}\n${ots}\nApare pe site in ~1 minut.`;
     } catch (e) {
       return `⚠️ Publicarea a esuat: ${String(e && e.message || e).slice(0, 300)}\nCiorna ramane; puteti incerca din nou /publica.`;
     }
@@ -135,6 +181,33 @@ async function listAll(env, prefix) {
     cursor = r.list_complete ? undefined : r.cursor;
   } while (cursor);
   return out;
+}
+
+// ---------- identitatea firmei (masterul unic) ----------
+async function loadIdentity() {
+  try {
+    const r = await fetch(IDENTITY_URL, { headers: { "User-Agent": "aiventure-telegram-control" }, cf: { cacheTtl: 300 } });
+    if (r.ok) {
+      const j = await r.json();
+      if (j && j.firma && j.firma.cui) return { id: j, source: `master aiventure-identity v${(j._meta && j._meta.versiune) || "?"}` };
+    }
+  } catch (_) { /* rezerva mai jos */ }
+  return { id: IDENTITY_FALLBACK, source: "copia de rezerva din bot (masterul nu a raspuns)" };
+}
+
+// ---------- data + ora, ora României ----------
+export function localParts(d) {
+  const f = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+  const p = Object.fromEntries(f.formatToParts(d).map((x) => [x.type, x.value]));
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  const offMin = Math.round((asUtc - Math.floor(d.getTime() / 1000) * 1000) / 60000);
+  const sign = offMin >= 0 ? "+" : "-", a = Math.abs(offMin);
+  const off = `${sign}${String(Math.floor(a / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}`;
+  const date = `${p.year}-${p.month}-${p.day}`;
+  return {
+    date, iso: `${date}T${p.hour}:${p.minute}:${p.second}${off}`,
+    ro: `${p.day}.${p.month}.${p.year}, ora ${p.hour}:${p.minute}, ora României (UTC${off})`
+  };
 }
 
 // ---------- GitHub ----------
@@ -231,18 +304,20 @@ async function publishNew(env, raw) {
   if (!parsed.title) throw new Error("lipseste titlul (prima linie)");
   const articles = await readArticles(env);
   const sitemap = await readFile(env, "sitemap.xml");
-  const { slug, id, url } = pickIdSlug(parsed.title, articles.articles || []);
-  const now = new Date().toISOString();
+  const { slug, id, url } = pickIdSlug(parsed.slug || parsed.title, articles.articles || []);
+  const when = localParts(new Date()), now = when.iso;
+  const ident = await loadIdentity();
   const digest = await sha256Bytes(parsed.body), sha = hex(digest);
   const ots = await otsStamp(digest);
-  const meta = { id, title: parsed.title, slug, category: parsed.category, author: "AiVenture", published: now.slice(0, 10), published_at: now,
+  const meta = { id, title: parsed.title, seo_title: parsed.seoTitle, description: parsed.desc, keywords: parsed.keywords, faq: parsed.faq.length,
+    slug, category: parsed.category, author: AUTHOR_NAME, publisher: "AiVenture S.R.L.", published: when.date, published_at: now,
     version: "1.0", status: "published", canonical: url, sha256: sha, ots_status: ots ? "PENDING" : "NOT_TIMESTAMPED", source: "telegram",
     versions: [{ version: "1.0", at: now, sha256: sha, path: `/blog/${slug}/` }] };
   articles.articles = [...(articles.articles || []), meta];
-  articles.updated = now.slice(0, 10);
-  const page = renderPage({ ...parsed, id, url, version: "1.0", publishedAt: now, sha, ots: !!ots, history: [] });
+  articles.updated = when.date;
+  const page = renderPage({ ...parsed, id, url, version: "1.0", publishedAt: now, sha, ots: !!ots, history: [] }, ident.id);
   const newSitemap = sitemap.includes(`<loc>${url}</loc>`) ? sitemap
-    : sitemap.replace("</urlset>", `<url><loc>${url}</loc><lastmod>${now.slice(0, 10)}</lastmod></url>\n</urlset>`);
+    : sitemap.replace("</urlset>", `<url><loc>${url}</loc><lastmod>${now}</lastmod></url>\n</urlset>`);
   const files = [
     { path: `blog/${slug}/index.html`, text: page },
     { path: `blog/${slug}/article.txt`, text: parsed.body },
@@ -252,7 +327,7 @@ async function publishNew(env, raw) {
   ];
   if (ots) files.push({ path: `blog/${slug}/article.txt.ots`, bytes: ots.bytes });
   await commitFiles(env, `Blog: ${id} v1.0 ${parsed.title} (Telegram)`, files);
-  return { id, url, version: "1.0", sha, ots: ots && ots.calendars };
+  return { id, url, version: "1.0", sha, ots: ots && ots.calendars, when: when.ro, faq: parsed.faq.length, identitySource: ident.source };
 }
 
 async function publishEdit(env, id, raw) {
@@ -269,7 +344,8 @@ async function publishEdit(env, id, raw) {
   const dir = (await gh(env, `/contents/blog/${slug}?ref=${BRANCH}`)) || [];
   const files = [];
   for (const f of dir) if (f.type === "file") files.push({ path: `blog/${slug}/v${oldV}/${f.name}`, sha: f.sha });
-  const now = new Date().toISOString();
+  const when = localParts(new Date()), now = when.iso;
+  const ident = await loadIdentity();
   const digest = await sha256Bytes(parsed.body), sha = hex(digest);
   const ots = await otsStamp(digest);
   const publishedAt = old.published_at || old.published || now;
@@ -278,10 +354,11 @@ async function publishEdit(env, id, raw) {
   const versions = prevVersions.map((v) => v.version === oldV ? { ...v, path: `/blog/${slug}/v${oldV}/` } : v)
     .concat([{ version: newV, at: now, sha256: sha, path: `/blog/${slug}/` }]);
   const meta = { ...old, title: parsed.title, category: parsed.category !== "Articol" ? parsed.category : (old.category || "Articol"),
+    seo_title: parsed.seoTitle, description: parsed.desc, keywords: parsed.keywords, faq: parsed.faq.length, author: AUTHOR_NAME, publisher: "AiVenture S.R.L.",
     version: newV, updated_at: now, sha256: sha, ots_status: ots ? "PENDING" : "NOT_TIMESTAMPED", versions };
-  list[idx] = meta; articles.updated = now.slice(0, 10);
+  list[idx] = meta; articles.updated = when.date;
   const page = renderPage({ ...parsed, category: meta.category, id, url, version: newV, publishedAt, updatedAt: now, sha, ots: !!ots,
-    history: versions.filter((v) => v.version !== newV) });
+    history: versions.filter((v) => v.version !== newV) }, ident.id);
   files.push(
     { path: `blog/${slug}/index.html`, text: page },
     { path: `blog/${slug}/article.txt`, text: parsed.body },
@@ -290,7 +367,7 @@ async function publishEdit(env, id, raw) {
   );
   if (ots) files.push({ path: `blog/${slug}/article.txt.ots`, bytes: ots.bytes });
   await commitFiles(env, `Blog: ${id} v${newV} ${parsed.title} (Telegram, modificare)`, files);
-  return { id, url, version: newV, sha, ots: ots && ots.calendars };
+  return { id, url, version: newV, sha, ots: ots && ots.calendars, when: when.ro, faq: parsed.faq.length, identitySource: ident.source };
 }
 
 // ---------- text -> HTML ----------
@@ -301,8 +378,9 @@ export function slugify(s) {
   return t.slice(0, 70).replace(/-[^-]*$/, "");
 }
 function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
-function inline(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"); }
-function strip(s) { return String(s).replace(/\*\*/g, ""); }
+function inline(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>"); }
+function strip(s) { return String(s).replace(/\*\*/g, "").replace(/`/g, "").trim(); }
+function unq(s) { return String(s).trim().replace(/^["'„“]|["'”“]$/g, "").trim(); }
 
 const reUl = /^\s*[-*•]\s+/;
 const reOl = /^\s*\d+[.)]\s+/;
@@ -312,35 +390,107 @@ const cells = (l) => {
   return parts.map((c) => c.trim());
 };
 
+// Antet "---" ... "---" (YAML simplu): cheie: valoare, liste "  - element", comentarii " # ..." eliminate.
+function parseFrontMatter(lines, i) {
+  const fm = {};
+  let key = null, j = i + 1;
+  for (; j < lines.length; j++) {
+    const l = lines[j];
+    if (/^---\s*$/.test(l)) return { fm, next: j + 1 };
+    const noComment = l.replace(/\s+#.*$/, "");
+    if (!noComment.trim() || /^\s*#/.test(l)) continue;
+    const li = /^\s+-\s+(.*)$/.exec(noComment);
+    if (li && key) { if (!Array.isArray(fm[key])) fm[key] = []; fm[key].push(unq(li[1])); continue; }
+    const kv = /^([A-Za-z_ăâîșțĂÂÎȘȚ][\wăâîșțĂÂÎȘȚ-]*)\s*:\s*(.*)$/.exec(noComment);
+    if (kv) { key = kv[1].toLowerCase(); fm[key] = kv[2].trim() ? unq(kv[2]) : []; }
+  }
+  return { fm: {}, next: i }; // fără "---" de închidere: nu e antet
+}
+const pick = (o, ...ks) => { for (const k of ks) if (o[k] !== undefined && o[k] !== "" && !(Array.isArray(o[k]) && !o[k].length)) return o[k]; return undefined; };
+const asList = (v) => (Array.isArray(v) ? v : String(v || "").split(/[,;]/)).map((x) => unq(x)).filter(Boolean);
+
 export function parseArticle(raw) {
-  const lines = String(raw).replace(/\r/g, "").split("\n");
+  // 1) curățare: blocuri de cod, comentarii HTML
+  let txt = String(raw).replace(/\r/g, "").replace(/<!--[\s\S]*?-->/g, "").replace(/```[\s\S]*?(```|$)/g, "");
+  let lines = txt.split("\n");
   let i = 0;
   while (i < lines.length && !lines[i].trim()) i++;
-  const title = strip((lines[i] || "").replace(/^#+\s*/, "").trim());
+  // 2) antet "---" opțional
+  let fm = {};
+  if (/^---\s*$/.test(lines[i] || "")) { const r = parseFrontMatter(lines, i); fm = r.fm; i = r.next; while (i < lines.length && !lines[i].trim()) i++; }
+  // 3) titlul (H1)
+  let title = strip((lines[i] || "").replace(/^#+\s*/, ""));
   i++;
-  let category = "Articol";
-  const m = /^\s*categorie\s*:\s*(.+)$/i.exec(lines[i] || "");
-  if (m) { category = m[1].trim(); i++; }
+  if (!title) title = strip(pick(fm, "titlu", "h1", "title") || "").replace(/\s*\|\s*AiVenture\s*$/i, "");
+  // 4) rânduri de metadate imediat după titlu (Categorie / Descriere / Cuvinte cheie / Slug)
+  let category = pick(fm, "categorie", "category") || "Articol";
+  let desc = pick(fm, "meta_description", "descriere", "description") || "";
+  let keywords = [];
+  const mainKw = pick(fm, "cuvant_cheie_principal", "keyword");
+  if (mainKw) keywords.push(...asList(mainKw));
+  const secKw = pick(fm, "cuvinte_cheie_secundare", "cuvinte_cheie", "keywords");
+  if (secKw) keywords.push(...asList(secKw));
+  let slug = pick(fm, "slug") || "";
+  let seoTitle = pick(fm, "title", "titlu_seo") || "";
+  for (;;) {
+    while (i < lines.length && !lines[i].trim()) i++;
+    const m = /^\s*(categorie|descriere|cuvinte cheie|slug|titlu seo)\s*:\s*(.+)$/i.exec(lines[i] || "");
+    if (!m) break;
+    const k = m[1].toLowerCase(), v = m[2].trim();
+    if (k === "categorie") category = unq(v);
+    else if (k === "descriere") desc = unq(v);
+    else if (k === "cuvinte cheie") keywords.push(...asList(v));
+    else if (k === "slug") slug = unq(v);
+    else if (k === "titlu seo") seoTitle = unq(v);
+    i++;
+  }
+  keywords = [...new Set(keywords.map((k) => k.trim()).filter(Boolean))];
+  const intents = asList(pick(fm, "intentii", "intents") || []);
+
+  // 5) corp
   const rest = lines.slice(i);
-  const out = [], headings = [];
-  let firstPara = "";
+  const out = [], headings = [], faq = [];
+  let firstPara = "", pendingQ = null, skipAuthor = false;
   const isBlank = (k) => k < 0 || k >= rest.length || !rest[k].trim();
+  const addFaq = (q, a) => {
+    q = strip(q); a = strip(a);
+    if (!q || !a || faq.some((x) => x.q.toLowerCase() === q.toLowerCase())) return;
+    faq.push({ q, a: a.length > 600 ? a.slice(0, 597).replace(/\s+\S*$/, "") + "…" : a });
+  };
+  // răspunsul = primul paragraf de sub întrebare; dacă se termină cu „:”, se lipește și lista care urmează
+  let partial = "";
+  const answer = (a) => {
+    if (!pendingQ) return;
+    if (/:\s*$/.test(strip(a)) && !partial) { partial = strip(a); return; }
+    addFaq(pendingQ, partial ? `${partial} ${strip(a)}` : a); pendingQ = null; partial = "";
+  };
   let j = 0;
   while (j < rest.length) {
     const line = rest[j], t = line.trim();
     if (!t) { j++; continue; }
+    if (/^-{3,}$/.test(t) || /^\*{3,}$/.test(t)) { skipAuthor = false; j++; continue; }
+    // linia de byline scrisă de mână: o pune botul
+    if (/^\*\*(categorie|autor|publicat)\s*:?\*\*/i.test(t)) { j++; continue; }
     let h = /^(#{2,4})\s+(.*)$/.exec(t);
+    if (h && /despre autor/i.test(h[2])) { skipAuthor = true; j++; continue; }
+    if (skipAuthor) { j++; continue; }
     if (h || /^#\s+/.test(t)) {
       const lvl = h && h[1].length >= 3 ? 3 : 2;
       const txt = (h ? h[2] : t.replace(/^#\s+/, "")).trim();
-      out.push(`<h${lvl}>${inline(txt)}</h${lvl}>`); if (lvl === 2) headings.push(strip(txt)); j++; continue;
+      out.push(`<h${lvl}>${inline(txt)}</h${lvl}>`);
+      if (lvl === 2) headings.push(strip(txt));
+      pendingQ = /\?\s*$/.test(strip(txt)) ? txt : (lvl === 2 ? null : pendingQ);
+      j++; continue;
     }
+    // rând îngroșat care e o întrebare: „**Cum fac ...?**” -> întrebare FAQ
+    const bq = /^\*\*(.+\?)\*\*\s*$/.exec(t);
+    if (bq) { out.push(`<p class="q"><strong>${inline(bq[1])}</strong></p>`); pendingQ = bq[1]; j++; continue; }
     // rând numerotat singur, scurt, fără ; sau . la final -> subtitlu
     if (reOl.test(t)) {
       const prevOl = j > 0 && reOl.test(rest[j - 1].trim());
       const nextOl = j + 1 < rest.length && reOl.test(rest[j + 1].trim());
       if (!prevOl && !nextOl && t.length < 120 && !/[;.,:]$/.test(t)) {
-        out.push(`<h2>${inline(t)}</h2>`); headings.push(strip(t)); j++; continue;
+        out.push(`<h2>${inline(t)}</h2>`); headings.push(strip(t)); pendingQ = /\?\s*$/.test(t) ? t.replace(reOl, "") : null; j++; continue;
       }
     }
     if (isTableRow(t) && j + 1 < rest.length && isTableRow(rest[j + 1].trim())) {
@@ -356,30 +506,35 @@ export function parseArticle(raw) {
       while (j < rest.length) {
         const u = rest[j].trim();
         if (re.test(u)) { items.push(u.replace(re, "")); j++; continue; }
+        if (/^\s{2,}[-*•]\s+/.test(rest[j]) && items.length) { items[items.length - 1] += " — " + u.replace(reUl, ""); j++; continue; }
         if (!u && j + 1 < rest.length && re.test(rest[j + 1].trim())) { j++; continue; }
         break;
       }
       const tag = ordered ? "ol" : "ul";
       out.push(`<${tag}>${items.map((x) => `<li>${inline(x)}</li>`).join("")}</${tag}>`);
+      answer(items.map(strip).join("; "));
       continue;
     }
     if (/^>\s?/.test(t) || /^[„"“]/.test(t) && /[”"“]\s*$/.test(t)) {
       out.push(`<blockquote>${inline(t.replace(/^>\s?/, ""))}</blockquote>`); j++; continue;
     }
     // rând scurt singur, fără punctuație finală -> sub-subtitlu
-    if (isBlank(j - 1) && isBlank(j + 1) && t.length <= 70 && !t.includes("→") && !/[.;:,!?”"]$/.test(t) && out.length) {
+    if (isBlank(j - 1) && isBlank(j + 1) && t.length <= 70 && !t.includes("→") && !/[.;:,!?”"*]$/.test(t) && out.length) {
       out.push(`<h3>${inline(t)}</h3>`); j++; continue;
     }
-    if (!firstPara) firstPara = strip(t);
-    out.push(`<p>${inline(t)}</p>`); j++;
+    if (!firstPara) firstPara = strip(t.replace(/^\*\*pe scurt:?\*\*\s*:?\s*/i, ""));
+    out.push(`<p>${inline(t)}</p>`);
+    answer(t);
+    j++;
   }
-  let desc = firstPara || title;
+  const descFromAuthor = !!desc;
+  if (!desc) desc = firstPara || title;
   if (desc.length > 160) desc = desc.slice(0, 157).replace(/\s+\S*$/, "") + "…";
-  return { title, category, desc, body: out.join("\n"), headings };
+  if (!seoTitle) seoTitle = title.length <= 60 ? `${title} | AiVenture` : title;
+  return { title, seoTitle, category, desc, descFromAuthor, keywords, intents, slug, body: out.join("\n"), headings, faq };
 }
 
-
-const CSS = "*{box-sizing:border-box}body{margin:0;background:#090b10;color:#f5f5f5;font:17px/1.7 system-ui,-apple-system,Segoe UI,sans-serif}main{max-width:820px;margin:auto;padding:26px 18px 80px}a{color:#e7c86e;text-decoration:none}.crumb,.meta{font-size:13px;color:#999}h1{font-size:clamp(34px,7vw,58px);line-height:1.06;margin:28px 0 12px}h2{margin-top:44px;line-height:1.2}h3{margin-top:28px;color:#e7c86e}blockquote{margin:14px 0;padding:10px 16px;border-left:3px solid #e7c86e;background:#11141b}.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:15px}th,td{border:1px solid #292d36;padding:8px 10px;text-align:left;vertical-align:top}th{background:#11141b}.hash{word-break:break-all;font:12px ui-monospace,monospace;color:#9298a4;border-top:1px solid #292d36;margin-top:50px;padding-top:18px}.hash a{color:#9298a4;text-decoration:underline}";
+const CSS = "*{box-sizing:border-box}body{margin:0;background:#090b10;color:#f5f5f5;font:17px/1.7 system-ui,-apple-system,Segoe UI,sans-serif}main{max-width:820px;margin:auto;padding:26px 18px 80px}a{color:#e7c86e;text-decoration:none}.crumb,.meta{font-size:13px;color:#999}.meta strong{color:#ccc}h1{font-size:clamp(34px,7vw,58px);line-height:1.06;margin:28px 0 12px}h2{margin-top:44px;line-height:1.2}h3{margin-top:28px;color:#e7c86e}p.q{margin:22px 0 4px}blockquote{margin:14px 0;padding:10px 16px;border-left:3px solid #e7c86e;background:#11141b}code{font:14px ui-monospace,monospace;background:#11141b;padding:1px 5px;border-radius:4px}.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:15px}th,td{border:1px solid #292d36;padding:8px 10px;text-align:left;vertical-align:top}th{background:#11141b}.author{margin-top:50px;padding:18px;border:1px solid #292d36;border-radius:10px;background:#0d1016;font-size:14px;line-height:1.6}.author h2{margin:0 0 8px;font-size:18px}.author ul{margin:6px 0;padding-left:18px}.hash{word-break:break-all;font:12px ui-monospace,monospace;color:#9298a4;border-top:1px solid #292d36;margin-top:30px;padding-top:18px}.hash a{color:#9298a4;text-decoration:underline}";
 
 export function fmtRo(iso) {
   const s = String(iso || "");
@@ -389,15 +544,82 @@ export function fmtRo(iso) {
   } catch (_) { return s; }
 }
 
-// a: {title, desc, category, body, id, url, version, publishedAt, updatedAt?, sha, ots, history:[{version, at, path}]}
-export function renderPage(a) {
-  const ld = { "@context": "https://schema.org", "@type": "BlogPosting", headline: a.title, description: a.desc, inLanguage: "ro",
-    datePublished: a.publishedAt, ...(a.updatedAt ? { dateModified: a.updatedAt } : {}), version: a.version,
-    author: { "@type": "Organization", name: "AiVenture S.R.L." }, publisher: { "@type": "Organization", name: "AiVenture S.R.L." }, mainEntityOfPage: a.url };
-  const line = [a.id, `v${a.version}`, `publicat ${fmtRo(a.publishedAt)}`, a.updatedAt ? `modificat ${fmtRo(a.updatedAt)}` : "", esc(a.category)].filter(Boolean).join(" · ");
+function orgSchema(I) {
+  const f = I.firma || {}, s = f.sediu || {}, c = I.contact || {}, p = I.profiluri || {};
+  const sameAs = [...new Set([
+    ...((I.retea && I.retea.domenii) || []).filter((d) => d === "5thelement.ai" || d === "aiventure.ro").map((d) => `https://${d}`),
+    p.linkedin_firma, p.linkedin_showcase, p.crunchbase, p.facebook, p.x, p.youtube, p.medium, p.reddit
+  ].filter(Boolean))];
+  const phone = (c.whatsapp && /phone=(\d+)/.exec(c.whatsapp)) ? /phone=(\d+)/.exec(c.whatsapp)[1] : undefined;
+  return {
+    "@type": "Organization", "@id": ORG_ID,
+    name: f.denumire_legala, legalName: f.denumire_legala, alternateName: [f.denumire_alternativa, f.brand_operare].filter(Boolean),
+    url: "https://5thelement.ai/", email: c.email, telephone: phone,
+    taxID: f.cui, vatID: f.cod_tva, foundingDate: f.data_infiintare,
+    identifier: [
+      { "@type": "PropertyValue", propertyID: "CUI", value: f.cui },
+      { "@type": "PropertyValue", propertyID: "EUID", value: f.euid },
+      { "@type": "PropertyValue", propertyID: "ONRC", value: f.nr_registrul_comertului },
+      { "@type": "PropertyValue", propertyID: "CAEN", value: f.caen_principal }
+    ].filter((x) => x.value),
+    address: { "@type": "PostalAddress", streetAddress: [s.strada, s.sector].filter(Boolean).join(", "), addressLocality: s.localitate, postalCode: s.cod_postal, addressCountry: s.tara },
+    founder: f.fondator ? { "@type": "Person", name: f.fondator.nume, sameAs: [f.fondator.orcid, f.fondator.linkedin].filter(Boolean) } : undefined,
+    sameAs
+  };
+}
+
+function authorBox(I, a) {
+  const f = I.firma || {}, s = f.sediu || {}, c = I.contact || {}, p = I.profiluri || {};
+  const phone = (c.whatsapp && /phone=(\d+)/.exec(c.whatsapp)) ? /phone=(\d+)/.exec(c.whatsapp)[1] : "";
+  const li = (k, v) => (v ? `<li><strong>${esc(k)}:</strong> ${v}</li>` : "");
+  const lnk = (u, t) => `<a href="${esc(u)}" rel="noopener">${esc(t || u.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""))}</a>`;
+  return `<section class="author" id="autor"><h2>Despre autor: ${esc(AUTHOR_NAME)}</h2><p>Articol scris de <strong>${esc(AUTHOR_NAME)}</strong>, echipa ${esc(f.denumire_legala || "")} (${esc(f.brand_operare || "")}).</p><ul>`
+    + li("Denumire legală", esc(f.denumire_legala))
+    + li("CUI", `${esc(f.cui)} · <strong>Cod TVA:</strong> ${esc(f.cod_tva)}`)
+    + li("Nr. Registrul Comerțului", `${esc(f.nr_registrul_comertului)} · <strong>EUID:</strong> ${esc(f.euid)}`)
+    + li("Data înființării", `${esc((f.data_infiintare || "").split("-").reverse().join("."))} · <strong>CAEN principal:</strong> ${esc(f.caen_principal)}`)
+    + li("Sediu social", esc([s.strada, s.sector, s.localitate, s.cod_postal, "România"].filter(Boolean).join(", ")))
+    + li("Fondator", f.fondator ? `${esc(f.fondator.nume)}${f.fondator.orcid ? " · ORCID " + lnk(f.fondator.orcid, f.fondator.orcid.replace(/^.*orcid\.org\//, "")) : ""}` : "")
+    + li("Contact", `${lnk("mailto:" + c.email, c.email)}${phone ? " · WhatsApp " + lnk(c.whatsapp, phone) : ""}`)
+    + li("Site-uri", `${lnk("https://5thelement.ai")} · ${lnk("https://aiventure.ro")}`)
+    + li("Profiluri", [p.linkedin_firma && lnk(p.linkedin_firma, "LinkedIn"), p.crunchbase && lnk(p.crunchbase, "Crunchbase"), p.youtube && lnk(p.youtube, "YouTube"), p.x && lnk(p.x, "X")].filter(Boolean).join(" · "))
+    + `</ul><p><strong>Publicat:</strong> <time datetime="${a.publishedAt}">${fmtRo(a.publishedAt)}</time>${a.updatedAt ? ` · <strong>Modificat:</strong> <time datetime="${a.updatedAt}">${fmtRo(a.updatedAt)}</time>` : ""} · v${a.version}</p></section>`;
+}
+
+// a: {title, seoTitle, desc, keywords, faq, category, body, id, url, version, publishedAt, updatedAt?, sha, ots, history:[{version, at, path}]}
+// I: masterul aiventure-identity (sau copia de rezervă)
+export function renderPage(a, I = IDENTITY_FALLBACK) {
+  const keywords = a.keywords || [], faq = a.faq || [];
+  const seoTitle = a.seoTitle || `${a.title} | AiVenture`;
+  const graph = [
+    {
+      "@type": "BlogPosting", "@id": `${a.url}#articol`, headline: a.title, name: seoTitle, description: a.desc, inLanguage: "ro",
+      datePublished: a.publishedAt, dateModified: a.updatedAt || a.publishedAt, identifier: a.id, version: a.version,
+      ...(keywords.length ? { keywords: keywords.join(", ") } : {}),
+      articleSection: a.category,
+      ...(faq.length ? { about: faq.map((x) => x.q) } : {}),
+      author: { "@type": "Organization", "@id": TEAM_ID, name: AUTHOR_NAME, parentOrganization: { "@id": ORG_ID } },
+      publisher: { "@id": ORG_ID },
+      mainEntityOfPage: { "@type": "WebPage", "@id": a.url },
+      isPartOf: { "@type": "Blog", "@id": `${SITE}/blog/#blog`, name: "Blog AiVenture", url: `${SITE}/blog/` }
+    },
+    orgSchema(I),
+    { "@type": "BreadcrumbList", itemListElement: [
+      { "@type": "ListItem", position: 1, name: "AiVenture", item: `${SITE}/` },
+      { "@type": "ListItem", position: 2, name: "Blog", item: `${SITE}/blog/` },
+      { "@type": "ListItem", position: 3, name: a.title, item: a.url }
+    ] }
+  ];
+  if (faq.length) graph.push({ "@type": "FAQPage", "@id": `${a.url}#intrebari`, mainEntity: faq.map((x) => ({ "@type": "Question", name: x.q, acceptedAnswer: { "@type": "Answer", text: x.a } })) });
+  const ld = { "@context": "https://schema.org", "@graph": graph };
+  const line = [`<strong>Autor:</strong> <a href="#autor">${esc(AUTHOR_NAME)}</a> (AiVenture S.R.L.)`, a.id, `v${a.version}`,
+    `<strong>publicat</strong> <time datetime="${a.publishedAt}">${fmtRo(a.publishedAt)}</time>`,
+    a.updatedAt ? `<strong>modificat</strong> <time datetime="${a.updatedAt}">${fmtRo(a.updatedAt)}</time>` : "", esc(a.category)].filter(Boolean).join(" · ");
   const hist = a.history && a.history.length ? `<br>Versiuni anterioare: ${a.history.map((v) => `<a href="${v.path}">v${v.version}</a> (${fmtRo(v.at)})`).join(", ")}` : "";
   const ots = a.ots
     ? `OpenTimestamps: dovadă trimisă la calendare (confirmare în Bitcoin în câteva ore) · <a href="article.txt">article.txt</a> · <a href="article.txt.ots">article.txt.ots</a> · verificare: <a href="https://opentimestamps.org">opentimestamps.org</a>`
     : `OpenTimestamps: neefectuat`;
-  return `<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(a.title)} | AiVenture</title><meta name="description" content="${esc(a.desc)}"><link rel="canonical" href="${a.url}"><meta property="og:type" content="article"><meta property="og:title" content="${esc(a.title)}"><meta property="og:description" content="${esc(a.desc)}"><meta property="og:url" content="${a.url}"><meta property="article:published_time" content="${a.publishedAt}">${a.updatedAt ? `<meta property="article:modified_time" content="${a.updatedAt}">` : ""}<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script><style>${CSS}</style></head><body><main><div class="crumb"><a href="/">AiVenture</a> / <a href="/blog/">Blog</a> / ${a.id}</div><article><h1>${esc(a.title)}</h1><div class="meta">${line}</div>\n${a.body}\n</article><div class="hash">${a.id} · v${a.version} · SHA-256 conținut (article.txt): ${a.sha}<br>${ots}${hist}</div><p><a href="/blog/">← Toate articolele</a></p></main></body></html>\n`;
+  const kw = keywords.length ? `<meta name="keywords" content="${esc(keywords.join(", "))}">` : "";
+  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(seoTitle)}</title><meta name="description" content="${esc(a.desc)}">${kw}<meta name="author" content="${esc(AUTHOR_NAME)} — AiVenture S.R.L."><meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large"><link rel="canonical" href="${a.url}"><meta property="og:type" content="article"><meta property="og:locale" content="ro_RO"><meta property="og:site_name" content="AiVenture"><meta property="og:title" content="${esc(seoTitle)}"><meta property="og:description" content="${esc(a.desc)}"><meta property="og:url" content="${a.url}"><meta property="article:published_time" content="${a.publishedAt}"><meta property="article:modified_time" content="${a.updatedAt || a.publishedAt}"><meta property="article:author" content="${esc(AUTHOR_NAME)}"><meta property="article:section" content="${esc(a.category)}">${keywords.map((k) => `<meta property="article:tag" content="${esc(k)}">`).join("")}<meta name="twitter:card" content="summary"><meta name="twitter:site" content="@aipath512"><script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script><style>${CSS}</style>`;
+  return `<!doctype html><html lang="ro"><head>${head}</head><body><main><div class="crumb"><a href="/">AiVenture</a> / <a href="/blog/">Blog</a> / ${a.id}</div><article><h1>${esc(a.title)}</h1><div class="meta">${line}</div>\n${a.body}\n</article>${authorBox(I, a)}<div class="hash">${a.id} · v${a.version} · SHA-256 conținut (article.txt): ${a.sha}<br>${ots}${hist}</div><p><a href="/blog/">← Toate articolele</a></p></main></body></html>\n`;
 }
