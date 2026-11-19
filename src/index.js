@@ -1,5 +1,8 @@
 /**
- * AIVENTURE TELEGRAM CONTROL — consola de comandă prin Telegram.   v1.6 · 2026-11-19
+ * AIVENTURE TELEGRAM CONTROL — consola de comandă prin Telegram.   v1.7 · 2026-11-19
+ *
+ * v1.7 față de v1.6: blog v1.3 — autorul trimite la https://aiventure.ro/autor/aiventure-team/; blocul de autor, distribuirea și
+ *   pasul următor (funnel) le pune middleware-ul site-ului aiventure.ro pe toate articolele.
  *
  * v1.6 față de v1.5: blog v1.2 — articole optimizate Google + AI: autor „AiVenture Team” + toate datele firmei (masterul
  *   aiventure-identity), dată + oră în ora României, titlu SEO, descriere, cuvinte cheie, întrebări-intenție => FAQPage,
@@ -50,7 +53,7 @@
  *    dacă API-ul le respinge, /costuri arată mesajul de eroare al API-ului (fără token).
  */
 import { blogCommand, blogCollect } from "./blog.js";
-const VERSION = "v1.6 · 2026-11-19";
+const VERSION = "v1.7 · 2026-11-19";
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 const DB_NAMES = { "0d6de488-285f-458b-b4b0-5f9ac913c5f1": "b2b-romania-db" };
 // Cote incluse în Workers Paid (D1): 25 mld citiri / lună, 50 mil scrieri / lună. Peste cotă: 1 USD / mld citiri, 1 USD / mil scrieri.

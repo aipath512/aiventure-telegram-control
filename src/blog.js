@@ -2,6 +2,11 @@
  * AIVENTURE BLOG PRIN TELEGRAM — v1.1 · 2026-11-19
  * Publică și modifică articole pe https://aiventure.ro/blog/ direct din Telegram, fără Claude și fără laptop.
  *
+ * v1.3 față de v1.2: autorul „AiVenture Team” are pagina proprie https://aiventure.ro/autor/aiventure-team/ — linia de autor și
+ *   Schema.org (author.url) trimit acolo. Blocul vizibil „Despre autor” (firma legală + LinkedIn AiVenture Digital + Dan Ionescu),
+ *   butoanele „Copiază linkul”, pasul următor (Audit GEO) și articolele înrudite le pune middleware-ul site-ului
+ *   (aiventure functions/_middleware.js v1.3), pe TOATE articolele — de aceea botul nu le mai scrie în pagină (o singură sursă).
+ *
  * v1.2 față de v1.1 — fiecare articol iese optimizat pentru Google ȘI pentru AI:
  *   AUTOR      „AiVenture Team” + toate datele firmei AiVenture S.R.L., citite la publicare din masterul unic
  *              https://github.com/aipath512/aiventure-identity (identitate/aiventure-identity.json); dacă masterul
@@ -38,7 +43,7 @@
  *
  * NEVOI: KV BLOG (aiventure-blog-ciorne); secret GITHUB_TOKEN (doar aipath512/aiventure, Contents: Read and write)
  */
-export const BLOG_VERSION = "blog v1.2 · 2026-11-19";
+export const BLOG_VERSION = "blog v1.3 · 2026-11-19";
 const REPO = "aipath512/aiventure";
 const BRANCH = "main";
 const SITE = "https://aiventure.ro";
@@ -46,6 +51,7 @@ const IDENTITY_URL = "https://raw.githubusercontent.com/aipath512/aiventure-iden
 const ORG_ID = "https://5thelement.ai/#organization";
 const TEAM_ID = "https://5thelement.ai/#team";
 const AUTHOR_NAME = "AiVenture Team";
+const AUTHOR_URL = "https://aiventure.ro/autor/aiventure-team/";
 const TZ = "Europe/Bucharest";
 const DRAFT_TTL = 7 * 24 * 3600;
 const OTS_CALENDARS = ["https://a.pool.opentimestamps.org", "https://b.pool.opentimestamps.org", "https://a.pool.eternitywall.com"];
@@ -568,24 +574,6 @@ function orgSchema(I) {
   };
 }
 
-function authorBox(I, a) {
-  const f = I.firma || {}, s = f.sediu || {}, c = I.contact || {}, p = I.profiluri || {};
-  const phone = (c.whatsapp && /phone=(\d+)/.exec(c.whatsapp)) ? /phone=(\d+)/.exec(c.whatsapp)[1] : "";
-  const li = (k, v) => (v ? `<li><strong>${esc(k)}:</strong> ${v}</li>` : "");
-  const lnk = (u, t) => `<a href="${esc(u)}" rel="noopener">${esc(t || u.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""))}</a>`;
-  return `<section class="author" id="autor"><h2>Despre autor: ${esc(AUTHOR_NAME)}</h2><p>Articol scris de <strong>${esc(AUTHOR_NAME)}</strong>, echipa ${esc(f.denumire_legala || "")} (${esc(f.brand_operare || "")}).</p><ul>`
-    + li("Denumire legală", esc(f.denumire_legala))
-    + li("CUI", `${esc(f.cui)} · <strong>Cod TVA:</strong> ${esc(f.cod_tva)}`)
-    + li("Nr. Registrul Comerțului", `${esc(f.nr_registrul_comertului)} · <strong>EUID:</strong> ${esc(f.euid)}`)
-    + li("Data înființării", `${esc((f.data_infiintare || "").split("-").reverse().join("."))} · <strong>CAEN principal:</strong> ${esc(f.caen_principal)}`)
-    + li("Sediu social", esc([s.strada, s.sector, s.localitate, s.cod_postal, "România"].filter(Boolean).join(", ")))
-    + li("Fondator", f.fondator ? `${esc(f.fondator.nume)}${f.fondator.orcid ? " · ORCID " + lnk(f.fondator.orcid, f.fondator.orcid.replace(/^.*orcid\.org\//, "")) : ""}` : "")
-    + li("Contact", `${lnk("mailto:" + c.email, c.email)}${phone ? " · WhatsApp " + lnk(c.whatsapp, phone) : ""}`)
-    + li("Site-uri", `${lnk("https://5thelement.ai")} · ${lnk("https://aiventure.ro")}`)
-    + li("Profiluri", [p.linkedin_firma && lnk(p.linkedin_firma, "LinkedIn"), p.crunchbase && lnk(p.crunchbase, "Crunchbase"), p.youtube && lnk(p.youtube, "YouTube"), p.x && lnk(p.x, "X")].filter(Boolean).join(" · "))
-    + `</ul><p><strong>Publicat:</strong> <time datetime="${a.publishedAt}">${fmtRo(a.publishedAt)}</time>${a.updatedAt ? ` · <strong>Modificat:</strong> <time datetime="${a.updatedAt}">${fmtRo(a.updatedAt)}</time>` : ""} · v${a.version}</p></section>`;
-}
-
 // a: {title, seoTitle, desc, keywords, faq, category, body, id, url, version, publishedAt, updatedAt?, sha, ots, history:[{version, at, path}]}
 // I: masterul aiventure-identity (sau copia de rezervă)
 export function renderPage(a, I = IDENTITY_FALLBACK) {
@@ -598,7 +586,7 @@ export function renderPage(a, I = IDENTITY_FALLBACK) {
       ...(keywords.length ? { keywords: keywords.join(", ") } : {}),
       articleSection: a.category,
       ...(faq.length ? { about: faq.map((x) => x.q) } : {}),
-      author: { "@type": "Organization", "@id": TEAM_ID, name: AUTHOR_NAME, parentOrganization: { "@id": ORG_ID } },
+      author: { "@type": "Organization", "@id": TEAM_ID, name: AUTHOR_NAME, url: AUTHOR_URL, parentOrganization: { "@id": ORG_ID } },
       publisher: { "@id": ORG_ID },
       mainEntityOfPage: { "@type": "WebPage", "@id": a.url },
       isPartOf: { "@type": "Blog", "@id": `${SITE}/blog/#blog`, name: "Blog AiVenture", url: `${SITE}/blog/` }
@@ -612,7 +600,7 @@ export function renderPage(a, I = IDENTITY_FALLBACK) {
   ];
   if (faq.length) graph.push({ "@type": "FAQPage", "@id": `${a.url}#intrebari`, mainEntity: faq.map((x) => ({ "@type": "Question", name: x.q, acceptedAnswer: { "@type": "Answer", text: x.a } })) });
   const ld = { "@context": "https://schema.org", "@graph": graph };
-  const line = [`<strong>Autor:</strong> <a href="#autor">${esc(AUTHOR_NAME)}</a> (AiVenture S.R.L.)`, a.id, `v${a.version}`,
+  const line = [`<strong>Autor:</strong> <a href="/autor/aiventure-team/" rel="author">${esc(AUTHOR_NAME)}</a> (AiVenture S.R.L.)`, a.id, `v${a.version}`,
     `<strong>publicat</strong> <time datetime="${a.publishedAt}">${fmtRo(a.publishedAt)}</time>`,
     a.updatedAt ? `<strong>modificat</strong> <time datetime="${a.updatedAt}">${fmtRo(a.updatedAt)}</time>` : "", esc(a.category)].filter(Boolean).join(" · ");
   const hist = a.history && a.history.length ? `<br>Versiuni anterioare: ${a.history.map((v) => `<a href="${v.path}">v${v.version}</a> (${fmtRo(v.at)})`).join(", ")}` : "";
@@ -620,6 +608,6 @@ export function renderPage(a, I = IDENTITY_FALLBACK) {
     ? `OpenTimestamps: dovadă trimisă la calendare (confirmare în Bitcoin în câteva ore) · <a href="article.txt">article.txt</a> · <a href="article.txt.ots">article.txt.ots</a> · verificare: <a href="https://opentimestamps.org">opentimestamps.org</a>`
     : `OpenTimestamps: neefectuat`;
   const kw = keywords.length ? `<meta name="keywords" content="${esc(keywords.join(", "))}">` : "";
-  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(seoTitle)}</title><meta name="description" content="${esc(a.desc)}">${kw}<meta name="author" content="${esc(AUTHOR_NAME)} — AiVenture S.R.L."><meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large"><link rel="canonical" href="${a.url}"><meta property="og:type" content="article"><meta property="og:locale" content="ro_RO"><meta property="og:site_name" content="AiVenture"><meta property="og:title" content="${esc(seoTitle)}"><meta property="og:description" content="${esc(a.desc)}"><meta property="og:url" content="${a.url}"><meta property="article:published_time" content="${a.publishedAt}"><meta property="article:modified_time" content="${a.updatedAt || a.publishedAt}"><meta property="article:author" content="${esc(AUTHOR_NAME)}"><meta property="article:section" content="${esc(a.category)}">${keywords.map((k) => `<meta property="article:tag" content="${esc(k)}">`).join("")}<meta name="twitter:card" content="summary"><meta name="twitter:site" content="@aipath512"><script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script><style>${CSS}</style>`;
-  return `<!doctype html><html lang="ro"><head>${head}</head><body><main><div class="crumb"><a href="/">AiVenture</a> / <a href="/blog/">Blog</a> / ${a.id}</div><article><h1>${esc(a.title)}</h1><div class="meta">${line}</div>\n${a.body}\n</article>${authorBox(I, a)}<div class="hash">${a.id} · v${a.version} · SHA-256 conținut (article.txt): ${a.sha}<br>${ots}${hist}</div><p><a href="/blog/">← Toate articolele</a></p></main></body></html>\n`;
+  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(seoTitle)}</title><meta name="description" content="${esc(a.desc)}">${kw}<meta name="author" content="${esc(AUTHOR_NAME)} — AiVenture S.R.L."><meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large"><link rel="canonical" href="${a.url}"><link rel="author" href="/autor/aiventure-team/"><meta property="og:type" content="article"><meta property="og:locale" content="ro_RO"><meta property="og:site_name" content="AiVenture"><meta property="og:title" content="${esc(seoTitle)}"><meta property="og:description" content="${esc(a.desc)}"><meta property="og:url" content="${a.url}"><meta property="article:published_time" content="${a.publishedAt}"><meta property="article:modified_time" content="${a.updatedAt || a.publishedAt}"><meta property="article:author" content="${esc(AUTHOR_NAME)}"><meta property="article:section" content="${esc(a.category)}">${keywords.map((k) => `<meta property="article:tag" content="${esc(k)}">`).join("")}<meta name="twitter:card" content="summary"><meta name="twitter:site" content="@aipath512"><script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script><style>${CSS}</style>`;
+  return `<!doctype html><html lang="ro"><head>${head}</head><body><main><div class="crumb"><a href="/">AiVenture</a> / <a href="/blog/">Blog</a> / ${a.id}</div><article><h1>${esc(a.title)}</h1><div class="meta">${line}</div>\n${a.body}\n</article><div class="hash">${a.id} · v${a.version} · SHA-256 conținut (article.txt): ${a.sha}<br>${ots}${hist}</div><p><a href="/blog/">← Toate articolele</a></p></main></body></html>\n`;
 }
