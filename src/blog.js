@@ -1,5 +1,7 @@
 /**
- * AIVENTURE BLOG PRIN TELEGRAM — v1.5 · 2026-11-19
+ * AIVENTURE BLOG PRIN TELEGRAM — v1.6 · 2026-11-19
+ *
+ * v1.6 față de v1.5: publishNew exportat (folosit și de pagina de scris, src/scrie.js); câmpul „source” = telegram sau pagina-de-scris.
  *
  * v1.5 față de v1.4: AUTOR = Dan Ionescu (persoană, ORCID, pagina /autor/dan-ionescu/), PUBLICAT DE AiVenture S.R.L.
  *   (decizie 19.11.2026). „AiVenture Team” nu mai e autor; /autor/aiventure-team/ face 301 către /autor/dan-ionescu/.
@@ -51,7 +53,7 @@
  *
  * NEVOI: KV BLOG (aiventure-blog-ciorne); secret GITHUB_TOKEN (doar aipath512/aiventure, Contents: Read and write)
  */
-export const BLOG_VERSION = "blog v1.5 · 2026-11-19";
+export const BLOG_VERSION = "blog v1.6 · 2026-11-19";
 const REPO = "aipath512/aiventure";
 const BRANCH = "main";
 const SITE = "https://aiventure.ro";
@@ -280,6 +282,8 @@ async function readFile(env, path) {
 async function readArticles(env) {
   try { return JSON.parse(await readFile(env, "blog/articles.json")); } catch (_) { return { articles: [] }; }
 }
+export const readArticlesPublic = (env) => readArticles(env);
+export const pickIdSlugPublic = (t, l) => pickIdSlug(t, l);
 function pickIdSlug(title, list) {
   const used = new Set(list.map((a) => a.slug));
   const base = slugify(title) || "articol";
@@ -334,7 +338,7 @@ async function sha256Bytes(s) { return new Uint8Array(await crypto.subtle.digest
 const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 // ---------- publicare ----------
-async function publishNew(env, raw) {
+export async function publishNew(env, raw, source = "telegram") {
   const parsed = parseArticle(raw);
   if (!parsed.title) throw new Error("lipseste titlul (prima linie)");
   const articles = await readArticles(env);
@@ -346,7 +350,7 @@ async function publishNew(env, raw) {
   const ots = await otsStamp(digest);
   const meta = { id, title: parsed.title, seo_title: parsed.seoTitle, description: parsed.desc, keywords: parsed.keywords, faq: parsed.faq.length,
     slug, category: parsed.category, author: AUTHOR_NAME, publisher: "AiVenture S.R.L.", published: when.date, published_at: now,
-    version: "1.0", status: "published", canonical: url, sha256: sha, ots_status: ots ? "PENDING" : "NOT_TIMESTAMPED", source: "telegram",
+    version: "1.0", status: "published", canonical: url, sha256: sha, ots_status: ots ? "PENDING" : "NOT_TIMESTAMPED", source,
     versions: [{ version: "1.0", at: now, sha256: sha, path: `/blog/${slug}/` }] };
   articles.articles = [...(articles.articles || []), meta];
   articles.updated = when.date;
@@ -361,7 +365,7 @@ async function publishNew(env, raw) {
     { path: "sitemap.xml", text: newSitemap }
   ];
   if (ots) files.push({ path: `blog/${slug}/article.txt.ots`, bytes: ots.bytes });
-  await commitFiles(env, `Blog: ${id} v1.0 ${parsed.title} (Telegram)`, files);
+  await commitFiles(env, `Blog: ${id} v1.0 ${parsed.title} (${source})`, files);
   const inow = await indexNow(pingList(url));
   return { id, url, version: "1.0", sha, ots: ots && ots.calendars, when: when.ro, faq: parsed.faq.length, identitySource: ident.source, idx: inow };
 }
