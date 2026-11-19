@@ -384,8 +384,8 @@ export function slugify(s) {
   return t.slice(0, 70).replace(/-[^-]*$/, "");
 }
 function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
-function inline(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>"); }
-function strip(s) { return String(s).replace(/\*\*/g, "").replace(/`/g, "").trim(); }
+function inline(s) { return esc(s).replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)\s]*)\)/g, '<a href="$2">$1</a>').replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>"); }
+function strip(s) { return String(s).replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/\*\*/g, "").replace(/`/g, "").trim(); }
 function unq(s) { return String(s).trim().replace(/^["'„“]|["'”“]$/g, "").trim(); }
 
 const reUl = /^\s*[-*•]\s+/;
