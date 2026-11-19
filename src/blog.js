@@ -1,5 +1,9 @@
 /**
- * AIVENTURE BLOG PRIN TELEGRAM — v1.1 · 2026-11-19
+ * AIVENTURE BLOG PRIN TELEGRAM — v1.5 · 2026-11-19
+ *
+ * v1.5 față de v1.4: AUTOR = Dan Ionescu (persoană, ORCID, pagina /autor/dan-ionescu/), PUBLICAT DE AiVenture S.R.L.
+ *   (decizie 19.11.2026). „AiVenture Team” nu mai e autor; /autor/aiventure-team/ face 301 către /autor/dan-ionescu/.
+ *   Antetul, meniul, căutarea, breadcrumb-ul, cuprinsul și schema completă le adaugă middleware-ul site-ului (v1.4).
  * Publică și modifică articole pe https://aiventure.ro/blog/ direct din Telegram, fără Claude și fără laptop.
  *
  * v1.4 față de v1.3: IndexNow — după fiecare /publica (articol nou sau modificat) botul anunță singur pagina, /blog/ și pagina
@@ -47,15 +51,16 @@
  *
  * NEVOI: KV BLOG (aiventure-blog-ciorne); secret GITHUB_TOKEN (doar aipath512/aiventure, Contents: Read and write)
  */
-export const BLOG_VERSION = "blog v1.4 · 2026-11-19";
+export const BLOG_VERSION = "blog v1.5 · 2026-11-19";
 const REPO = "aipath512/aiventure";
 const BRANCH = "main";
 const SITE = "https://aiventure.ro";
 const IDENTITY_URL = "https://raw.githubusercontent.com/aipath512/aiventure-identity/main/identitate/aiventure-identity.json";
 const ORG_ID = "https://5thelement.ai/#organization";
 const TEAM_ID = "https://5thelement.ai/#team";
-const AUTHOR_NAME = "AiVenture Team";
-const AUTHOR_URL = "https://aiventure.ro/autor/aiventure-team/";
+const AUTHOR_NAME = "Dan Ionescu";
+const AUTHOR_URL = "https://aiventure.ro/autor/dan-ionescu/";
+const PERSON_ID = "https://aiventure.ro/autor/dan-ionescu/#person";
 const TZ = "Europe/Bucharest";
 const INDEXNOW_KEY = "7a359604319b9e8555c8fe3074d402c7";
 const INDEXNOW_ENDPOINTS = ["https://api.indexnow.org/indexnow", "https://www.bing.com/indexnow"];
@@ -107,7 +112,7 @@ export async function blogCommand(env, chatId, cmd, args = []) {
   }
   if (cmd === "/anunta") {
     const list = ((await readArticles(env)).articles || []).filter((a) => a.status === "published" && a.slug);
-    const urls = [`${SITE}/blog/`, `${SITE}/autor/aiventure-team/`, ...list.map((a) => `${SITE}/blog/${a.slug}/`)];
+    const urls = [`${SITE}/blog/`, `${SITE}/autor/dan-ionescu/`, ...list.map((a) => `${SITE}/blog/${a.slug}/`)];
     const r = await indexNow(urls);
     return `📣 IndexNow: anuntate ${urls.length} pagini (blog, autor, ${list.length} articole)\nRaspuns: ${r}\n(200/202 = primit)`;
   }
@@ -136,7 +141,7 @@ export async function blogCommand(env, chatId, cmd, args = []) {
     if (!parsed.descFromAuthor) warn.push("descrierea e luata automat din primul paragraf");
     if (parsed.seoTitle.length > 65) warn.push(`titlul SEO are ${parsed.seoTitle.length} caractere (ideal sub 60)`);
     if (!parsed.faq.length) warn.push("fara intrebari-intentie, AI-ul are mai putin de citat");
-    const seo = `\n\nGOOGLE\nTitlu SEO: ${parsed.seoTitle}\nDescriere: ${parsed.desc}\nCuvinte cheie: ${kw}\n\nAI\nIntrebari-intentie cu raspuns: ${parsed.faq.length}${qs}\n\nAUTOR: ${AUTHOR_NAME} (AiVenture S.R.L., CUI 51415878 + toate datele firmei)\nORA: se pune la /publica (acum ar fi ${localParts(new Date()).ro})`;
+    const seo = `\n\nGOOGLE\nTitlu SEO: ${parsed.seoTitle}\nDescriere: ${parsed.desc}\nCuvinte cheie: ${kw}\n\nAI\nIntrebari-intentie cu raspuns: ${parsed.faq.length}${qs}\n\nAUTOR: ${AUTHOR_NAME} · publicat de AiVenture S.R.L. (CUI 51415878)\nORA: se pune la /publica (acum ar fi ${localParts(new Date()).ro})`;
     return `${head}${seo}\nPrimit: ${d.parts} mesaje, ${d.text.length.toLocaleString("ro-RO")} caractere${warn.length ? "\n\n⚠️ " + warn.join("\n⚠️ ") : ""}\n\nPublicare: /publica\nMai adaugati text: lipiti-l acum, apoi din nou /gata\nRenuntare: /anulez`;
   }
   if (cmd === "/publica") {
@@ -238,7 +243,7 @@ export async function indexNow(urls) {
   }));
   return res.join(", ");
 }
-const pingList = (url) => [url, `${SITE}/blog/`, `${SITE}/autor/aiventure-team/`];
+const pingList = (url) => [url, `${SITE}/blog/`, `${SITE}/autor/dan-ionescu/`];
 
 // ---------- GitHub ----------
 async function gh(env, path, opt = {}) {
@@ -612,7 +617,7 @@ export function renderPage(a, I = IDENTITY_FALLBACK) {
       ...(keywords.length ? { keywords: keywords.join(", ") } : {}),
       articleSection: a.category,
       ...(faq.length ? { about: faq.map((x) => x.q) } : {}),
-      author: { "@type": "Organization", "@id": TEAM_ID, name: AUTHOR_NAME, url: AUTHOR_URL, parentOrganization: { "@id": ORG_ID } },
+      author: { "@type": "Person", "@id": PERSON_ID, name: AUTHOR_NAME, url: AUTHOR_URL, sameAs: ["https://orcid.org/0009-0002-5498-1046", "https://ro.linkedin.com/in/dan-ionesco-a856082a0"], worksFor: { "@id": ORG_ID } },
       publisher: { "@id": ORG_ID },
       mainEntityOfPage: { "@type": "WebPage", "@id": a.url },
       isPartOf: { "@type": "Blog", "@id": `${SITE}/blog/#blog`, name: "Blog AiVenture", url: `${SITE}/blog/` }
@@ -626,7 +631,7 @@ export function renderPage(a, I = IDENTITY_FALLBACK) {
   ];
   if (faq.length) graph.push({ "@type": "FAQPage", "@id": `${a.url}#intrebari`, mainEntity: faq.map((x) => ({ "@type": "Question", name: x.q, acceptedAnswer: { "@type": "Answer", text: x.a } })) });
   const ld = { "@context": "https://schema.org", "@graph": graph };
-  const line = [`<strong>Autor:</strong> <a href="/autor/aiventure-team/" rel="author">${esc(AUTHOR_NAME)}</a> (AiVenture S.R.L.)`, a.id, `v${a.version}`,
+  const line = [`<strong>Autor:</strong> <a href="/autor/dan-ionescu/" rel="author">${esc(AUTHOR_NAME)}</a> · publicat de AiVenture S.R.L.`, a.id, `v${a.version}`,
     `<strong>publicat</strong> <time datetime="${a.publishedAt}">${fmtRo(a.publishedAt)}</time>`,
     a.updatedAt ? `<strong>modificat</strong> <time datetime="${a.updatedAt}">${fmtRo(a.updatedAt)}</time>` : "", esc(a.category)].filter(Boolean).join(" · ");
   const hist = a.history && a.history.length ? `<br>Versiuni anterioare: ${a.history.map((v) => `<a href="${v.path}">v${v.version}</a> (${fmtRo(v.at)})`).join(", ")}` : "";
@@ -634,6 +639,6 @@ export function renderPage(a, I = IDENTITY_FALLBACK) {
     ? `OpenTimestamps: dovadă trimisă la calendare (confirmare în Bitcoin în câteva ore) · <a href="article.txt">article.txt</a> · <a href="article.txt.ots">article.txt.ots</a> · verificare: <a href="https://opentimestamps.org">opentimestamps.org</a>`
     : `OpenTimestamps: neefectuat`;
   const kw = keywords.length ? `<meta name="keywords" content="${esc(keywords.join(", "))}">` : "";
-  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(seoTitle)}</title><meta name="description" content="${esc(a.desc)}">${kw}<meta name="author" content="${esc(AUTHOR_NAME)} — AiVenture S.R.L."><meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large"><link rel="canonical" href="${a.url}"><link rel="author" href="/autor/aiventure-team/"><meta property="og:type" content="article"><meta property="og:locale" content="ro_RO"><meta property="og:site_name" content="AiVenture"><meta property="og:title" content="${esc(seoTitle)}"><meta property="og:description" content="${esc(a.desc)}"><meta property="og:url" content="${a.url}"><meta property="article:published_time" content="${a.publishedAt}"><meta property="article:modified_time" content="${a.updatedAt || a.publishedAt}"><meta property="article:author" content="${esc(AUTHOR_NAME)}"><meta property="article:section" content="${esc(a.category)}">${keywords.map((k) => `<meta property="article:tag" content="${esc(k)}">`).join("")}<meta name="twitter:card" content="summary"><meta name="twitter:site" content="@aipath512"><script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script><style>${CSS}</style>`;
+  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(seoTitle)}</title><meta name="description" content="${esc(a.desc)}">${kw}<meta name="author" content="${esc(AUTHOR_NAME)}"><meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large"><link rel="canonical" href="${a.url}"><link rel="author" href="/autor/dan-ionescu/"><meta property="og:type" content="article"><meta property="og:locale" content="ro_RO"><meta property="og:site_name" content="AiVenture"><meta property="og:title" content="${esc(seoTitle)}"><meta property="og:description" content="${esc(a.desc)}"><meta property="og:url" content="${a.url}"><meta property="article:published_time" content="${a.publishedAt}"><meta property="article:modified_time" content="${a.updatedAt || a.publishedAt}"><meta property="article:author" content="${AUTHOR_URL}"><meta property="article:section" content="${esc(a.category)}">${keywords.map((k) => `<meta property="article:tag" content="${esc(k)}">`).join("")}<meta name="twitter:card" content="summary"><meta name="twitter:site" content="@aipath512"><script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script><style>${CSS}</style>`;
   return `<!doctype html><html lang="ro"><head>${head}</head><body><main><div class="crumb"><a href="/">AiVenture</a> / <a href="/blog/">Blog</a> / ${a.id}</div><article><h1>${esc(a.title)}</h1><div class="meta">${line}</div>\n${a.body}\n</article><div class="hash">${a.id} · v${a.version} · SHA-256 conținut (article.txt): ${a.sha}<br>${ots}${hist}</div><p><a href="/blog/">← Toate articolele</a></p></main></body></html>\n`;
 }

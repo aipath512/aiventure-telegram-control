@@ -3,6 +3,7 @@
  *
  * v1.8 față de v1.7: blog v1.4 — IndexNow automat la /publica + comanda /anunta (toate articolele).
  *
+ * v1.9 față de v1.8: blog v1.5 — autor Dan Ionescu (persoană, ORCID), publicat de AiVenture S.R.L.
  * v1.7 față de v1.6: blog v1.3 — autorul trimite la https://aiventure.ro/autor/aiventure-team/; blocul de autor, distribuirea și
  *   pasul următor (funnel) le pune middleware-ul site-ului aiventure.ro pe toate articolele.
  *
@@ -55,7 +56,7 @@
  *    dacă API-ul le respinge, /costuri arată mesajul de eroare al API-ului (fără token).
  */
 import { blogCommand, blogCollect } from "./blog.js";
-const VERSION = "v1.8 · 2026-11-19";
+const VERSION = "v1.9 · 2026-11-19";
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 const DB_NAMES = { "0d6de488-285f-458b-b4b0-5f9ac913c5f1": "b2b-romania-db" };
 // Cote incluse în Workers Paid (D1): 25 mld citiri / lună, 50 mil scrieri / lună. Peste cotă: 1 USD / mld citiri, 1 USD / mil scrieri.
